@@ -1,0 +1,35 @@
+name: "Android Resource Translator"
+description: "Checks Android resource files for missing translations and auto-translates using OpenAI."
+author: "Duarte Barbosa"
+
+branding:
+  icon: 'book-open'
+  color: 'green'
+
+env:
+  OPENAI_API_KEY:
+    description: "OpenAI API key for translation (passed via secrets)."
+
+inputs:
+  project_path:
+    description: "Path to the Android project base directory."
+    required: true
+  auto_translate:
+    description: "Automatically translate missing resources. Set to 'true' to enable."
+    required: false
+    default: "true"
+  validate_translations:
+    description: "Enable manual validation for OpenAI returned translations. Set to 'true' to enable."
+    required: false
+    default: "false"
+  log_trace:
+    description: "Enable detailed logging. Set to 'true' to enable."
+    required: false
+    default: "false"
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  #args:
+    #- ${{ inputs.input-one }} TODO Cleanup
+    #- ${{ inputs.input-two }}

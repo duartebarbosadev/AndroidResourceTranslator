@@ -6,7 +6,7 @@ import unittest
 # Your module imported assuming working directory
 # is root of repository. See workflow in repository
 # for example running of test cases.
-import entrypoint as ep
+import AndroidResourceTranslator as art
 
 class TestSomething(unittest.TestCase) :
 

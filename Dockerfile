@@ -6,7 +6,7 @@ FROM base as builder
 RUN pip install --no-cache-dir poetry==2.0.1
 
 WORKDIR /app
-COPY pyproject.toml /app/
+COPY pyproject.toml poetry.lock /app/
 
 # virtual env is created in "/app/.venv" directory
 ENV POETRY_NO_INTERACTION=1 \

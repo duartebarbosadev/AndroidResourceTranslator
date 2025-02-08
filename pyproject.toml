@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "src"
 version = "1.0"
-description = "Android Auto Translate"
-authors = ["Your Name <you@example.com>"]
+description = "Android String Translator"
+authors = ["Duarte Barbosa"]
 readme = "README.md"
 
 [tool.poetry.dependencies]

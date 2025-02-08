@@ -13,7 +13,8 @@ env:
 inputs:
   project_path:
     description: "Path to the Android project base directory."
-    required: true
+    required: false
+    default: "${{ github.workspace }}"
   auto_translate:
     description: "Automatically translate missing resources. Set to 'true' to enable."
     required: false

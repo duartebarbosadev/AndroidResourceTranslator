@@ -1,27 +1,4 @@
-FROM python:3.12-slim as base
+FROM cicirello/pyaction:4
 
-FROM base as builder
-
-# Install Poetry
-RUN pip install --no-cache-dir poetry==2.0.1
-
-WORKDIR /app
-COPY pyproject.toml poetry.lock /app/
-
-# virtual env is created in "/app/.venv" directory
-ENV POETRY_NO_INTERACTION=1 \
-POETRY_VIRTUALENVS_IN_PROJECT=1 \
-POETRY_VIRTUALENVS_CREATE=true \
-POETRY_CACHE_DIR=/tmp/poetry_cache
-
-# Install dependencies
-RUN --mount=type=cache,target=/tmp/poetry_cache poetry install --only main --no-root
-RUN poetry install
-
-FROM base as runner
-COPY src /app/src
-COPY --from=builder /app/.venv /app/.venv
-ENV PATH="/app/.venv/bin:$PATH"
-
-# Entry point
-ENTRYPOINT ["/app/src/AndroidResourceTranslator.py"]
+COPY AndroidResourceTranslator.py /AndroidResourceTranslator.py
+ENTRYPOINT ["/AndroidResourceTranslator.py"]

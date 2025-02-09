@@ -1,4 +1,5 @@
-FROM cicirello/pyaction:4
+FROM python:3-slim AS builder
+ADD . /app
 
 # Set the working directory inside the container
 WORKDIR /app

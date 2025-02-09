@@ -1,3 +1,7 @@
+# Ignore everything...
 *
+
+# ...except these files:
 !Dockerfile
-!entrypoint.py
+!requirements.txt
+!AndroidResourceTranslator.py

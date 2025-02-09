@@ -24,18 +24,6 @@ except ImportError:
     print("Error: openai package not installed. Please install it with pip install openai")
     sys.exit(1)
 
-
-# GitHub Actions automatically converts inputs to uppercase with a prefix:
-project_path = os.environ.get("INPUT_PROJECT_PATH")
-auto_translate = os.environ.get("INPUT_AUTO_TRANSLATE", "false").lower() == "true"
-validate_translations = os.environ.get("INPUT_VALIDATE_TRANSLATIONS", "false").lower() == "true"
-log_trace = os.environ.get("INPUT_LOG_TRACE", "false").lower() == "true"
-openai_api_key = os.environ.get("OPENAI_API_KEY")
-
-if not project_path:
-    print("Error: 'project_path' input not provided.")
-    sys.exit(1)
-
 # ------------------------------------------------------------------------------
 # Configuration Constants
 # ------------------------------------------------------------------------------
@@ -527,11 +515,25 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> None:
 # Main Entry Point
 # ------------------------------------------------------------------------------
 
+
 def main() -> None:
+    # Now read the environment variables here.
+    project_path = os.environ.get("INPUT_PROJECT_PATH")
+    auto_translate = os.environ.get("INPUT_AUTO_TRANSLATE", "false").lower() == "true"
+    validate_translations = os.environ.get("INPUT_VALIDATE_TRANSLATIONS", "false").lower() == "true"
+    log_trace = os.environ.get("INPUT_LOG_TRACE", "false").lower() == "true"
+    openai_api_key = os.environ.get("OPENAI_API_KEY")
+
+    if not project_path:
+        print("Error: 'project_path' input not provided.")
+        sys.exit(1)
+
+    # Also parse CLI args; for actions these might be overridden.
     parser = argparse.ArgumentParser(
         description="Android Resource Translation Checker (strings.xml only)"
     )
-    parser.add_argument("project_path", help="Path to the Android project base directory")
+    parser.add_argument("project_path", nargs="?", default=project_path,
+                        help="Path to the Android project base directory")
     parser.add_argument("-a", "--auto-translate", action="store_true",
                         help="Automatically translate missing resources using OpenAI")
     parser.add_argument("-v", "--validate-translations", action="store_true",
@@ -540,9 +542,11 @@ def main() -> None:
                         help="Log detailed trace information about operations including requests and responses with OpenAI")
     args = parser.parse_args()
 
+    # If the CLI args override the environment variables, you can use args here.
+    project_path = args.project_path
+
     configure_logging(args.log_trace)
 
-    project_path = args.project_path
     if not os.path.exists(project_path):
         logger.error("Error: The specified path does not exist!")
         sys.exit(1)
@@ -567,6 +571,6 @@ def main() -> None:
         )
 
     check_missing_translations(modules)
-
+    
 if __name__ == "__main__":
     main()

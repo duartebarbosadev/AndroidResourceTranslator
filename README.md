@@ -68,9 +68,9 @@ jobs:
           author: "${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>"
           signoff: "false"
           title: "[Translate Bot] Auto-generated translations for non-English languages"
-          body: |    
+          body: |  
             ${{ steps.translate.outputs.translation_report }}
-    
+  
             This pull request was automatically generated.
           labels: "translation, automated pr"
           assignees: "[yourname]"
@@ -108,8 +108,10 @@ The action supports the following inputs:
 
 After the translation process is executed, the action produces an output called `translation_report`. This report is generated in Markdown format and includes a detailed summary of all translations performed. The report contains:
 
-- **Module Information:**Each module found in your Android project is listed along with its language-specific resources.
-- **Strings Translations:**For each module and language, a table displays every key that was translated, including the original text and the resulting translation.
+- **Module Information:**
+  Each module found in your Android project is listed along with its language-specific resources.
+- **Strings Translations:**
+  For each module and language, a table displays every key that was translated, including the original text and the resulting translation.
 - **Plural Resources Translations:**
   If plural resources were translated, the report shows each plural resource name along with a table listing each plural quantity (e.g., `one`, `few`, `many`) and their corresponding translations.
 

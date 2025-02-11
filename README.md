@@ -4,7 +4,6 @@
 
 **Android Resource Translator** scans your `strings.xml` files for missing translations and automatically translates them using OpenAI’s language models.
 
----
 
 ## GitHub Actions Workflow Examples
 
@@ -87,8 +86,6 @@ python AndroidResourceTranslator.py /path/to/your/android/project --auto-transla
 
 You can also pass additional parameters like `--project-context` and `--log-trace` as needed.
 
----
-
 ## Configuration
 
 The action supports the following inputs:
@@ -101,8 +98,6 @@ The action supports the following inputs:
 | **openai_model**    | Specify the OpenAI model to use for translation. We advise using `gpt-3.5-turbo`.      | `"gpt-3.5-turbo"`         |   Yes   |
 | **project_context** | Additional project context to include in translation prompts.                            | `""`                      |   Yes   |
 | **ignore_folders**  | Comma-separated list of folder names to ignore during resource scanning (e.g., build).   | `"build"`                 |   Yes   |
-
----
 
 ## Translation Report Output
 
@@ -117,8 +112,6 @@ After the translation process is executed, the action produces an output called 
 
 This output is particularly useful for manual review and validation. In the provided advanced workflow, the report is automatically inserted into the body of a pull request, allowing maintainers to inspect the changes before merging.
 
----
-
 ## Projects Using Android Resource Translator
 
 We love to see our tool in action! Here are some projects that are using Android Resource Translator:
@@ -127,28 +120,18 @@ We love to see our tool in action! Here are some projects that are using Android
 
 *Have a project using Android Resource Translator? Let us know by submitting a pull request to add your project to this list!*
 
----
-
 ## Contributing
 
 Contributions are very welcome! If you have ideas for improvements or spot any issues, please open an issue or submit a pull request.
-
----
 
 ## Changelog
 
 All notable changes are documented in [CHANGELOG.md](./CHANGELOG.md).
 
----
-
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
 
----
-
 If you have any questions or need assistance, feel free to open an issue or reach out.
 
 *Built with ❤️ by [Duarte Barbosa](https://github.com/duartebarbosadev).*
-
----

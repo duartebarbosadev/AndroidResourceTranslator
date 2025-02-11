@@ -177,17 +177,17 @@ def detect_language_from_path(file_path: Path) -> str:
     return language
 
 
-def find_resource_files(base_path: str, ignore_folders: List[str] = None) -> Dict[str, AndroidModule]:
+def find_resource_files(resources_path: str, ignore_folders: List[str] = None) -> Dict[str, AndroidModule]:
     """
     Recursively search for strings.xml files in "values*" directories.
     Files whose paths contain any folder listed in ignore_folders (if provided) are skipped.
     Files are grouped by module and language.
     """
-    project_path = Path(base_path)
+    resources_dir = Path(resources_path)
     modules: Dict[str, AndroidModule] = {}
-    logger.debug(f"Starting search for resource files in {project_path}")
+    logger.debug(f"Starting search for resource files in {resources_dir}")
 
-    for xml_file_path in project_path.rglob("strings.xml"):
+    for xml_file_path in resources_dir.rglob("strings.xml"):
         if ignore_folders and any(ignored in xml_file_path.parts for ignored in ignore_folders):
             continue
         if not xml_file_path.parent.name.startswith("values"):
@@ -573,7 +573,8 @@ def main() -> None:
     is_github = os.environ.get("GITHUB_ACTIONS", "false").lower() == "true"
 
     if is_github:
-        project_path = os.environ.get("INPUT_PROJECT_PATH")
+        resources_paths_input = os.environ.get("INPUT_RESOURCES_PATHS")
+        resources_paths = [p.strip() for p in resources_paths_input.split(',') if p.strip()] if resources_paths_input else []
         auto_translate = os.environ.get("INPUT_AUTO_TRANSLATE", "false").lower() == "true"
         # No manual validation on GitHub; force it off.
         validate_translations = False  
@@ -586,7 +587,7 @@ def main() -> None:
         parser = argparse.ArgumentParser(
             description="Android Resource Translation Checker (strings.xml only)"
         )
-        parser.add_argument("project_path", help="Path to the Android project base directory")
+        parser.add_argument("resources_paths", nargs="+", help="Paths to the Android project directories containing resource files")
         parser.add_argument("-a", "--auto-translate", action="store_true",
                             help="Automatically translate missing resources using OpenAI")
         parser.add_argument("-v", "--validate-translations", action="store_true",
@@ -600,7 +601,7 @@ def main() -> None:
         parser.add_argument("--ignore-folders", default="build",
                             help="Comma separated list of folder names to ignore during resource scanning (e.g., build).")
         args = parser.parse_args()
-        project_path = args.project_path
+        resources_paths = args.resources_paths
         auto_translate = args.auto_translate
         validate_translations = args.validate_translations
         log_trace = args.log_trace
@@ -611,21 +612,32 @@ def main() -> None:
     
     configure_logging(log_trace)
 
-    if not project_path:
-        print("Error: 'project_path' input not provided.")
+    if not resources_paths:
+        print("Error: 'resources_paths' input not provided.")
         sys.exit(1)
+    for path in resources_paths:
+        if not os.path.exists(path):
+            logger.error(f"Error: The specified path {path} does not exist!")
+            sys.exit(1)
 
-    if not os.path.exists(project_path):
-        logger.error("Error: The specified path does not exist!")
-        sys.exit(1)
+    # Merge resources from multiple resource directories.
+    merged_modules: Dict[str, AndroidModule] = {}
+    for res_path in resources_paths:
+        modules = find_resource_files(res_path, ignore_folders)
+        for mod_name, mod in modules.items():
+            if mod_name in merged_modules:
+                # Merge language_resources from modules with the same name.
+                for lang, resources in mod.language_resources.items():
+                    merged_modules[mod_name].language_resources.setdefault(lang, []).extend(resources)
+            else:
+                merged_modules[mod_name] = mod
 
-    modules = find_resource_files(project_path, ignore_folders)
-    if not modules:
+    if not merged_modules:
         logger.error("No resource files found!")
         sys.exit(1)
 
     logger.info("Found string resources:")
-    for module in sorted(modules.values(), key=lambda m: m.name):
+    for module in sorted(merged_modules.values(), key=lambda m: m.name):
         module.print_resources()
 
     translation_log = {}
@@ -635,7 +647,7 @@ def main() -> None:
             logger.error("Error: OPENAI_API_KEY environment variable not set!")
             sys.exit(1)
         translation_log = auto_translate_resources(
-            modules,
+            merged_modules,
             openai_api_key,
             openai_model,
             project_context,
@@ -643,7 +655,7 @@ def main() -> None:
         )
 
     # Whether or not auto-translation was performed, still check for missing translations.
-    check_missing_translations(modules)
+    check_missing_translations(merged_modules)
 
     # Generate the translation report (this will be empty if no auto-translation occurred).
     report_output = create_translation_report(translation_log)

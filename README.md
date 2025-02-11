@@ -5,6 +5,7 @@
 **Android Resource Translator** scans your `strings.xml` files for missing translations and automatically translates them using OpenAI’s language models.
 
 <!--[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-enabled-brightgreen)](https://github.com/)-->
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/Python-3.x-blue.svg)](https://www.python.org/)
 
@@ -93,14 +94,14 @@ You can also pass additional parameters like `--project-context` and `--log-trac
 
 The action supports the following inputs:
 
-| Input                     | Description                                                                              | Default Value               | Optional |
-| ------------------------- | ---------------------------------------------------------------------------------------- | --------------------------- | :------: |
-| **project_path**    | Path to the Android project base directory.                                              | `${{ github.workspace }}` |   Yes   |
-| **auto_translate**  | Automatically translate missing resources. Set to `false` to disable auto-translation. | `"true"`                  |   Yes   |
-| **log_trace**       | Enable detailed logging. Use `"true"` for verbose output.                              | `"false"`                 |   Yes   |
-| **openai_model**    | Specify the OpenAI model to use for translation. We advise using `gpt-3.5-turbo`.      | `"gpt-3.5-turbo"`         |   Yes   |
-| **project_context** | Additional project context to include in translation prompts.                            | `""`                      |   Yes   |
-| **ignore_folders**  | Comma-separated list of folder names to ignore during resource scanning (e.g., build).   | `"build"`                 |   Yes   |
+| Input                     | Description                                                                                                                                                                                         | Default Value               | Optional | Example                                                                |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | -------- | ---------------------------------------------------------------------- |
+| **resources_paths**       | Paths to the Android resource directories. Typically includes directories such as `app/src/main/res`, `library/src/main/res`, etc. If not provided, this action will search throughout the entire project folder  (which is the default). | `${{ github.workspace }}` | Yes      | `./app/src/main/res, ./library/src/main/res, ./feature/src/main/res` | | **resources_paths | **
+| **auto_translate**        | Automatically translate missing resources. Set to `false` to disable auto-translation.                                                                                                             | `"true"`                  | Yes      | `"true"` or `"false"`                                                  |
+| **log_trace**             | Enable detailed logging. Use `"true"` for verbose output.                                                                                                                                           | `"false"`                 | Yes      | `"true"`                                                               |
+| **openai_model**          | Specify the OpenAI model to use for translation. We advise using `gpt-3.5-turbo`.                                                                                                                     | `"gpt-3.5-turbo"`         | Yes      | `"gpt-3.5-turbo"`, `"gpt-4o"`                                            |
+| **project_context**       | Additional project context to include in translation prompts.                                                                                                                                       | `""`                      | Yes      | `"Android launcher application"`                                       |
+| **ignore_folders**        | Comma-separated list of folder names to ignore during resource scanning (e.g., build).                                                                                                                 | `"build"`                 | Yes      | `"build,temp,cache"`                                                   |
 
 ## Translation Report Output
 

@@ -11,8 +11,8 @@ env:
     description: "OpenAI API key for translation (passed via secrets)."
 
 inputs:
-  project_path:
-    description: "Path to the Android project base directory."
+  resources_paths:
+    description: "Comma-separated paths to the Android resource directories (e.g., './app/src/main/res, ./library/src/main/res')."
     required: false
     default: "${{ github.workspace }}"
   auto_translate:

@@ -577,14 +577,14 @@ def main() -> None:
     import sys
     import argparse
 
-    # Determine whether we are running inside GitHub Actions.
-    # GitHub Actions automatically sets the GITHUB_ACTIONS environment variable to "true".
+    # Determine if we are running inside GitHub Actions.
     is_github = os.environ.get("GITHUB_ACTIONS", "false").lower() == "true"
 
     if is_github:
         project_path = os.environ.get("INPUT_PROJECT_PATH")
         auto_translate = os.environ.get("INPUT_AUTO_TRANSLATE", "false").lower() == "true"
-        validate_translations = os.environ.get("INPUT_VALIDATE_TRANSLATIONS", "false").lower() == "true"
+        # No manual validation on GitHub; force it off.
+        validate_translations = False  
         log_trace = os.environ.get("INPUT_LOG_TRACE", "false").lower() == "true"
         openai_api_key = os.environ.get("OPENAI_API_KEY")
         openai_model = os.environ.get("INPUT_OPENAI_MODEL", "gpt-3.5-turbo")
@@ -616,7 +616,7 @@ def main() -> None:
         project_context = args.project_context
         ignore_folders = [folder.strip() for folder in args.ignore_folders.split(',') if folder.strip()]
         openai_api_key = os.environ.get("OPENAI_API_KEY")
-
+    
     configure_logging(log_trace)
 
     if not project_path:
@@ -637,6 +637,7 @@ def main() -> None:
         module.print_resources()
 
     translation_log = {}
+    # If auto_translate is enabled, run the auto-translation process.
     if auto_translate:
         if not openai_api_key:
             logger.error("Error: OPENAI_API_KEY environment variable not set!")
@@ -649,12 +650,13 @@ def main() -> None:
             validate_translations=validate_translations,
         )
 
+    # Whether or not auto-translation was performed, still check for missing translations.
     check_missing_translations(modules)
 
-    # Generate the report as a string
+    # Generate the translation report (this will be empty if no auto-translation occurred).
     report_output = create_translation_report(translation_log)
 
-    # Save the report as an output
+    # Output the report
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
             print("translation_report<<EOF", file=f)

@@ -19,14 +19,22 @@ inputs:
     description: "Automatically translate missing resources. Set to 'true' to enable."
     required: false
     default: "true"
-  validate_translations:
-    description: "Enable manual validation for OpenAI returned translations. Set to 'true' to enable."
-    required: false
-    default: "false"
   log_trace:
     description: "Enable detailed logging. Set to 'true' to enable."
     required: false
     default: "false"
+  openai_model:
+    description: "Specify the OpenAI model to use for translation."
+    required: false
+    default: "gpt-3.5-turbo"
+  project_context:
+    description: "Additional project context to include in translation prompts."
+    required: false
+    default: ""
+  ignore_folders:
+    description: "Comma-separated list of folder names to ignore during resource scanning (e.g., build)."
+    required: false
+    default: "build"
 
 outputs:
   translation_report:

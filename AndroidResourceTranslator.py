@@ -185,9 +185,10 @@ def detect_language_from_path(file_path: Path) -> str:
     return language
 
 
-def find_resource_files(base_path: str) -> Dict[str, AndroidModule]:
+def find_resource_files(base_path: str, ignore_folders: List[str] = None) -> Dict[str, AndroidModule]:
     """
-    Recursively search for strings.xml files in "values*" directories (ignoring paths with 'build').
+    Recursively search for strings.xml files in "values*" directories.
+    Files whose paths contain any folder listed in ignore_folders (if provided) are skipped.
     Files are grouped by module and language.
     """
     project_path = Path(base_path)
@@ -195,7 +196,7 @@ def find_resource_files(base_path: str) -> Dict[str, AndroidModule]:
     logger.debug(f"Starting search for resource files in {project_path}")
 
     for xml_file_path in project_path.rglob("strings.xml"):
-        if "build" in xml_file_path.parts:
+        if ignore_folders and any(ignored in xml_file_path.parts for ignored in ignore_folders):
             continue
         if not xml_file_path.parent.name.startswith("values"):
             continue
@@ -297,7 +298,7 @@ def indent_xml(elem: ElementTree.Element, level: int = 0) -> None:
 # Translation & OpenAI API Integration
 # ------------------------------------------------------------------------------
 
-def call_openai(prompt: str, system_message: str, api_key: str) -> str:
+def call_openai(prompt: str, system_message: str, api_key: str, model: str = "gpt-3.5-turbo") -> str:
     """
     Helper function to call the OpenAI API with the given prompt and system message.
     Returns the response text.
@@ -306,7 +307,7 @@ def call_openai(prompt: str, system_message: str, api_key: str) -> str:
     client = OpenAI(api_key=api_key)
     logger.debug(f"Sending request to OpenAI with system prompt: {system_message} and user prompt:\n{prompt}")
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model=model,
         messages=[
             {"role": "system", "content": system_message},
             {"role": "user", "content": prompt},
@@ -318,7 +319,7 @@ def call_openai(prompt: str, system_message: str, api_key: str) -> str:
     return translation
 
 
-def translate_text(text: str, target_language: str, api_key: str, source_language: str = "English") -> str:
+def translate_text(text: str, target_language: str, api_key: str, model: str, project_context: str, source_language: str = "English") -> str:
     """
     Translates a simple string resource from source_language to target_language, following Android guidelines.
     """
@@ -327,11 +328,13 @@ def translate_text(text: str, target_language: str, api_key: str, source_languag
 
     prompt = TRANSLATION_GUIDELINES.format(target_language=target_language) + text
     system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=target_language)
-    translated = call_openai(prompt, system_message, api_key)
+    if project_context:
+        system_message += f"\nProject context: {project_context}"
+    translated = call_openai(prompt, system_message, api_key, model)
     return translated
 
 
-def translate_plural_text(source_plural: Dict[str, str], target_language: str, api_key: str) -> Dict[str, str]:
+def translate_plural_text(source_plural: Dict[str, str], target_language: str, api_key: str, model: str, project_context: str) -> Dict[str, str]:
     """
     Translates a plural resource from English to target_language, following Android guidelines.
     """
@@ -342,7 +345,9 @@ def translate_plural_text(source_plural: Dict[str, str], target_language: str, a
         source_json
     )
     system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=target_language)
-    translation_output = call_openai(prompt, system_message, api_key)
+    if project_context:
+        system_message += f"\nProject context: {project_context}"
+    translation_output = call_openai(prompt, system_message, api_key, model)
     try:
         plural_dict = json.loads(translation_output)
         if isinstance(plural_dict, dict):
@@ -381,6 +386,8 @@ def validate_translation(
 def auto_translate_resources(
     modules: Dict[str, AndroidModule],
     openai_api_key: str,
+    openai_model: str,
+    project_context: str,
     validate_translations: bool = False,
 ) -> dict:
     """
@@ -419,7 +426,13 @@ def auto_translate_resources(
                         logger.info(f"Copied empty string for key '{key}'")
                         continue
                     try:
-                        translated = translate_text(source_text, target_language=lang, api_key=openai_api_key)
+                        translated = translate_text(
+                            source_text,
+                            target_language=lang,
+                            api_key=openai_api_key,
+                            model=openai_model,
+                            project_context=project_context,
+                        )
                         logger.info(f"Translated string '{key}': '{source_text}' -> '{translated}'")
                         if validate_translations:
                             translated = validate_translation(source_text, translated, target_language=lang)
@@ -440,7 +453,13 @@ def auto_translate_resources(
                     current_map = res.plurals.get(plural_name, {})
                     if not current_map or set(current_map.keys()) != set(default_map.keys()):
                         try:
-                            generated_plural = translate_plural_text(default_map, target_language=lang, api_key=openai_api_key)
+                            generated_plural = translate_plural_text(
+                                default_map,
+                                target_language=lang,
+                                api_key=openai_api_key,
+                                model=openai_model,
+                                project_context=project_context,
+                            )
                             merged = generated_plural.copy()
                             merged.update(current_map)
                             res.plurals[plural_name] = merged
@@ -568,8 +587,10 @@ def main() -> None:
         validate_translations = os.environ.get("INPUT_VALIDATE_TRANSLATIONS", "false").lower() == "true"
         log_trace = os.environ.get("INPUT_LOG_TRACE", "false").lower() == "true"
         openai_api_key = os.environ.get("OPENAI_API_KEY")
+        openai_model = os.environ.get("INPUT_OPENAI_MODEL", "gpt-3.5-turbo")
+        project_context = os.environ.get("INPUT_PROJECT_CONTEXT", "")
+        ignore_folders = [folder.strip() for folder in os.environ.get("INPUT_IGNORE_FOLDERS", "build").split(',') if folder.strip()]
     else:
-        # When running locally, parse the inputs from command-line arguments.
         parser = argparse.ArgumentParser(
             description="Android Resource Translation Checker (strings.xml only)"
         )
@@ -580,11 +601,20 @@ def main() -> None:
                             help="Enable manual validation for OpenAI returned translations before saving into the XML file")
         parser.add_argument("-l", "--log-trace", action="store_true",
                             help="Log detailed trace information about operations including requests and responses with OpenAI")
+        parser.add_argument("--openai-model", default="gpt-3.5-turbo",
+                            help="Specify the OpenAI model to use for translation.")
+        parser.add_argument("--project-context", default="",
+                            help="Specify additional project context to include in translation prompts.")
+        parser.add_argument("--ignore-folders", default="build",
+                            help="Comma separated list of folder names to ignore during resource scanning (e.g., build).")
         args = parser.parse_args()
         project_path = args.project_path
         auto_translate = args.auto_translate
         validate_translations = args.validate_translations
         log_trace = args.log_trace
+        openai_model = args.openai_model
+        project_context = args.project_context
+        ignore_folders = [folder.strip() for folder in args.ignore_folders.split(',') if folder.strip()]
         openai_api_key = os.environ.get("OPENAI_API_KEY")
 
     configure_logging(log_trace)
@@ -597,7 +627,7 @@ def main() -> None:
         logger.error("Error: The specified path does not exist!")
         sys.exit(1)
 
-    modules = find_resource_files(project_path)
+    modules = find_resource_files(project_path, ignore_folders)
     if not modules:
         logger.error("No resource files found!")
         sys.exit(1)
@@ -614,6 +644,8 @@ def main() -> None:
         translation_log = auto_translate_resources(
             modules,
             openai_api_key,
+            openai_model,
+            project_context,
             validate_translations=validate_translations,
         )
 

@@ -6,22 +6,14 @@ This script scans Android resource files (strings.xml) for string and plural res
 reports missing translations, and can automatically translate missing entries using OpenAI.
 """
 
-import os
 import sys
 import json
 import re
-import argparse
 import logging
 from pathlib import Path
 from xml.etree import ElementTree
 from collections import defaultdict
 from typing import Dict, Set, List, Tuple
-
-try:
-    import openai
-except ImportError:
-    print("Error: openai package not installed. Please install it with pip install openai")
-    sys.exit(1)
 
 # ------------------------------------------------------------------------------
 # Configuration Constants

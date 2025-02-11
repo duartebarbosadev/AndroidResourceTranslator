@@ -4,6 +4,9 @@
 
 **Android Resource Translator** scans your `strings.xml` files for missing translations and automatically translates them using OpenAI’s language models.
 
+<!--[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-enabled-brightgreen)](https://github.com/)-->
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python Version](https://img.shields.io/badge/Python-3.x-blue.svg)](https://www.python.org/)
 
 ## GitHub Actions Workflow Examples
 

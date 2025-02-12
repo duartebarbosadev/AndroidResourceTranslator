@@ -258,6 +258,18 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
 
     try:
         tree.write(resource.path, encoding="utf-8", xml_declaration=True)
+        # Post-process the file to replace single quotes with double quotes in the XML declaration.
+        with open(resource.path, "r+", encoding="utf-8") as f:
+            content = f.read()
+            # Replace the XML declaration that uses single quotes with one using double quotes.
+            content = re.sub(
+                r'^<\?xml version=\'1\.0\' encoding=\'utf-8\'\?>',
+                '<?xml version="1.0" encoding="utf-8"?>',
+                content
+            )
+            f.seek(0)
+            f.write(content)
+            f.truncate()
         logger.info(f"Updated XML file: {resource.path}")
     except Exception as e:
         logger.error(f"Error writing XML file {resource.path}: {e}")

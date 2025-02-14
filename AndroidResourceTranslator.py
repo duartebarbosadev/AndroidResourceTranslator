@@ -13,7 +13,8 @@ import logging
 from pathlib import Path
 from xml.etree import ElementTree
 from collections import defaultdict
-from typing import Dict, Set, List, Tuple
+from typing import Dict, Set, List
+from lxml import etree
 
 # ------------------------------------------------------------------------------
 # Configuration Constants
@@ -56,7 +57,7 @@ Guidelines:
 PLURAL_GUIDELINES_ADDITION = """\
 6. **Plural Resources:**
    For plural translations, if the source resource contains only a single plural key (e.g., "other") but the target language requires multiple plural forms, return all the appropriate plural keys for the target language.
-   *Example:* If the English source is `<item quantity="other">%d day left</item>`, the Portuguese translation should include both `<item quantity="one">%d dia restante</item>` and `<item quantity="many">%d dias restantes</item>`. Note that in this case, the Portuguese does not need to include the "other" key, but it is expected in the result.
+   *Example:* If the English source is `<item quantity="other">%d day left</item>`, the Portuguese translation should include both `<item quantity="one">%d dia restante</item>` and `<item quantity="many">%d dias restantes</item>`. Ensure that each plural form reflects the proper singular and plural usage with the correct one, many etc as defined by the target language's standard usage. Use the target language's pluralization guidelines as a reference to determine which keys to include and their corresponding forms.
    The full set supported by Android is zero, one, two, few, many, and other.
 
 7. **Output Requirements:**
@@ -139,16 +140,21 @@ class AndroidModule:
     """
     Represents an Android module containing several strings.xml files for different languages.
     """
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, identifier: str = None) -> None:
         self.name: str = name
+        # A unique identifier (for example the full module path) so that modules
+        # in different locations are not merged if they share the same short name.
+        self.identifier: str = identifier or name
         self.language_resources: Dict[str, List[AndroidResourceFile]] = defaultdict(list)
 
     def add_resource(self, language: str, resource: AndroidResourceFile) -> None:
-        logger.debug(f"Adding resource for language '{language}' in module '{self.name}': {resource.path}")
+        logger.debug(
+            f"Adding resource for language '{language}' in module '{self.name}': {resource.path}"
+        )
         self.language_resources[language].append(resource)
 
     def print_resources(self) -> None:
-        logger.info(f"Module: {self.name}")
+        logger.info(f"Module: {self.name} (ID: {self.identifier})")
         for language, resources in sorted(self.language_resources.items()):
             logger.info(f"  Language: {language}")
             for resource in resources:
@@ -196,80 +202,123 @@ def find_resource_files(resources_path: str, ignore_folders: List[str] = None) -
         language = detect_language_from_path(xml_file_path)
         try:
             module_path = xml_file_path.parent.parent.parent  # e.g. module/src/main/res
-            module_name = module_path.name
         except Exception:
-            module_name = xml_file_path.parent.name
-
-        if module_name not in modules:
-            modules[module_name] = AndroidModule(module_name)
-            logger.debug(f"Created module entry for {module_name}")
-
+            module_path = xml_file_path.parent
+        module_name = module_path.name
+        unique_key = str(module_path.resolve())
+        if unique_key not in modules:
+            modules[unique_key] = AndroidModule(module_name, identifier=unique_key)
+            logger.debug(
+                f"Created module entry for {module_name} with identifier {unique_key}"
+            )
         resource_file = AndroidResourceFile(xml_file_path, language)
-        modules[module_name].add_resource(language, resource_file)
+        modules[unique_key].add_resource(language, resource_file)
     return modules
 
 
 def update_xml_file(resource: AndroidResourceFile) -> None:
     """
-    Update the XML file represented by an AndroidResourceFile with new translations.
-    Appends missing <string> and <plurals>/<item> elements and writes back a pretty-printed XML.
+    Update the XML file represented by an AndroidResourceFile by appending only the missing elements,
+    while preserving the original formatting (including comments) as much as possible.
+    
+    This version uses lxml and makes sure that if new elements are appended, the first new element is
+    correctly indented.
     """
     try:
-        tree = ElementTree.parse(resource.path)
+        parser = etree.XMLParser(remove_blank_text=False)
+        tree = etree.parse(str(resource.path), parser)
         root = tree.getroot()
     except Exception as e:
         logger.error(f"Error reading XML file {resource.path}: {e}")
         return
 
-    # Update <string> elements.
-    existing_string_names = {elem.attrib.get("name") for elem in root if elem.tag == "string"}
+    # Determine sample indentation from an existing child of <resources>; default to 4 spaces.
+    sample_indent = "    "
+    if len(root) > 0:
+        m = re.match(r'\n(\s+)', root[0].tail or "")
+        if m:
+            sample_indent = m.group(1)
+
+    # Ensure the whitespace before the first child is properly indented.
+    if not root.text or not root.text.strip():
+        root.text = "\n" + sample_indent
+
+    # --- Update <string> elements (direct children of <resources>) ---
+    # Record the original number of children before appending new nodes.
+    original_root_count = len(root)
+    existing_string_names = {elem.get("name") for elem in root if elem.tag == "string"}
+    
+    # If there are existing children, ensure the last one ends with a newline and the proper indent.
+    if original_root_count > 0:
+        last_original = root[original_root_count - 1]
+        if not last_original.tail or not last_original.tail.endswith(sample_indent):
+            last_original.tail = "\n" + sample_indent
+
+    # Append new <string> elements.
     for key, translation in resource.strings.items():
         if key not in existing_string_names:
-            new_elem = ElementTree.Element("string", {"name": key})
+            new_elem = etree.Element("string", name=key)
             new_elem.text = translation
+            # Set the tail to newline + indent.
+            new_elem.tail = "\n" + sample_indent
             root.append(new_elem)
-            logger.debug(f"Added <string name='{key}'>{translation}</string> to {resource.path}")
+            logger.debug(f"Appended <string name='{key}'> element to {resource.path}")
 
-    # Update <plurals> elements.
-    existing_plural_elements = {}
-    for elem in root:
-        if elem.tag == "plurals":
-            name = elem.attrib.get("name")
-            if name:
-                existing_plural_elements[name] = elem
-
+    # --- Update <plurals> elements ---
+    existing_plural_elements = {elem.get("name"): elem for elem in root if elem.tag == "plurals"}
     for plural_name, items in resource.plurals.items():
         if plural_name in existing_plural_elements:
             plural_elem = existing_plural_elements[plural_name]
         else:
-            plural_elem = ElementTree.Element("plurals", {"name": plural_name})
+            plural_elem = etree.Element("plurals", name=plural_name)
+            # Set the text so that inner <item> elements get an extra indent level.
+            plural_elem.text = "\n" + sample_indent + "    "
             root.append(plural_elem)
-            logger.debug(f"Added <plurals name='{plural_name}'> element to {resource.path}")
+            # Set a tail for the new <plurals> element
+            plural_elem.tail = "\n" + sample_indent
 
-        existing_quantities = {child.attrib.get("quantity") for child in plural_elem if child.tag == "item"}
+        # Use one extra indent level for <item> elements.
+        item_indent = sample_indent + "    "
+        existing_quantities = {child.get("quantity") for child in plural_elem if child.tag == "item"}
         for qty, translation in items.items():
             if qty not in existing_quantities:
-                new_item = ElementTree.Element("item", {"quantity": qty})
+                new_item = etree.Element("item", quantity=qty)
                 new_item.text = translation
+                new_item.tail = "\n" + item_indent  # temporary tail for the item
                 plural_elem.append(new_item)
-                logger.debug(f"Added <item quantity='{qty}'>{translation}</item> to plurals '{plural_name}' in {resource.path}")
+                logger.debug(
+                    f"Appended <item quantity='{qty}'> element to plurals '{plural_name}' in {resource.path}"
+                )
+        # Adjust the tail of the last <item> so that the closing </plurals> is properly indented.
+        if len(plural_elem) > 0:
+            plural_elem[-1].tail = "\n" + sample_indent
 
-    indent_xml(root)
+    # Finally, ensure the last element in <resources> has a tail with just a newline (for the closing tag).
+    if len(root) > 0:
+        root[-1].tail = "\n"
 
     try:
-        tree.write(resource.path, encoding="utf-8", xml_declaration=True)
-        # Post-process the file to replace single quotes with double quotes in the XML declaration.
+        # Serialize the tree to a byte string.
+        xml_bytes = etree.tostring(tree, encoding="utf-8", xml_declaration=True, pretty_print=True)
+        # Remove any trailing newline characters.
+        xml_bytes = xml_bytes.rstrip(b"\n")
+        
+        # Write the cleaned-up XML back to file.
+        with open(resource.path, "wb") as f:
+            f.write(xml_bytes)
+        
+        # Post-process the XML declaration if needed.
         with open(resource.path, "r+", encoding="utf-8") as f:
             content = f.read()
-            # Replace the XML declaration that uses single quotes with one using double quotes.
             content = re.sub(
-                r'^<\?xml version=\'1\.0\' encoding=\'utf-8\'\?>',
+                r"<\?xml version='1\.0' encoding='UTF-8'\?>",
                 '<?xml version="1.0" encoding="utf-8"?>',
                 content
             )
             f.seek(0)
             f.write(content)
             f.truncate()
+        
         logger.info(f"Updated XML file: {resource.path}")
     except Exception as e:
         logger.error(f"Error writing XML file {resource.path}: {e}")
@@ -309,7 +358,9 @@ def call_openai(prompt: str, system_message: str, api_key: str, model: str = "gp
     """
     from openai import OpenAI
     client = OpenAI(api_key=api_key)
-    logger.debug(f"Sending request to OpenAI with system prompt: {system_message} and user prompt:\n{prompt}")
+    logger.debug(
+        f"Sending request to OpenAI with system prompt: {system_message} and user prompt:\n{prompt}"
+    )
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -401,7 +452,9 @@ def auto_translate_resources(
     translation_log = {}
     for module in modules.values():
         if "default" not in module.language_resources:
-            logger.warning(f"Module '{module.name}' missing default language resources; skipping auto translation.")
+            logger.warning(
+                f"Module '{module.name}' missing default language resources; skipping auto translation."
+            )
             continue
 
         module_default_strings: Dict[str, str] = {}
@@ -531,7 +584,8 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> None:
 
             if missing_strings or missing_plurals:
                 missing_str = f"strings: {', '.join(sorted(missing_strings))}" if missing_strings else ""
-                missing_plu = (" | plurals: " + ", ".join([f"{k}({', '.join(sorted(v))})" for k, v in missing_plurals.items()])
+                missing_plu = (" | plurals: " + ", ".join([f"{k}({', '.join(sorted(v))})" 
+                                                            for k, v in missing_plurals.items()])
                                if missing_plurals else "")
                 logger.info(f"  [{lang}]: missing {missing_str}{missing_plu}")
             else:
@@ -597,7 +651,7 @@ def main() -> None:
         ignore_folders = [folder.strip() for folder in os.environ.get("INPUT_IGNORE_FOLDERS", "build").split(',') if folder.strip()]
     else:
         parser = argparse.ArgumentParser(
-            description="Android Resource Translation Checker (strings.xml only)"
+            description="Android Resource Translation"
         )
         parser.add_argument("resources_paths", nargs="+", help="Paths to the Android project directories containing resource files")
         parser.add_argument("-a", "--auto-translate", action="store_true",
@@ -613,6 +667,7 @@ def main() -> None:
         parser.add_argument("--ignore-folders", default="build",
                             help="Comma separated list of folder names to ignore during resource scanning (e.g., build).")
         args = parser.parse_args()
+        
         resources_paths = args.resources_paths
         auto_translate = args.auto_translate
         validate_translations = args.validate_translations
@@ -636,13 +691,13 @@ def main() -> None:
     merged_modules: Dict[str, AndroidModule] = {}
     for res_path in resources_paths:
         modules = find_resource_files(res_path, ignore_folders)
-        for mod_name, mod in modules.items():
-            if mod_name in merged_modules:
-                # Merge language_resources from modules with the same name.
+        for identifier, mod in modules.items():
+            if identifier in merged_modules:
+                # Merge language_resources from modules with the same unique identifier.
                 for lang, resources in mod.language_resources.items():
-                    merged_modules[mod_name].language_resources.setdefault(lang, []).extend(resources)
+                    merged_modules[identifier].language_resources.setdefault(lang, []).extend(resources)
             else:
-                merged_modules[mod_name] = mod
+                merged_modules[identifier] = mod
 
     if not merged_modules:
         logger.error("No resource files found!")

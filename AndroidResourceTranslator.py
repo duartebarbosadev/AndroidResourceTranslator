@@ -22,52 +22,57 @@ from lxml import etree
 
 TRANSLATION_GUIDELINES = """\
 Follow these guidelines carefully.
-Guidelines:
-1. **Purpose & Context:**  
-   The translation is for an Android application's UI. Use terminology and phrasing consistent with android applications. Do not change the meaning of the text.
 
-2. **Formatting & Structure:**  
-   - Preserve all placeholders (e.g., %d, %s, %1$s) exactly as they appear.  
-   - Keep HTML, CDATA, or XML structure unchanged, translating only textual content.  
-   - Escape apostrophes with a backslash (\\') as required by Android.
+**Purpose & Context:**  
+This translation is for an Android application's UI. Use concise, clear language consistent with standard Android UI conventions. Do not alter the intended meaning of the text.
 
-3. **System Terms:**  
-   Do not translate system state words such as WARNING, FAILED, SUCCESS, PAUSED, or RUNNING. They must remain in English and in uppercase.
+**Formatting & Structure:**  
+- Preserve all placeholders exactly as they appear (e.g., %d, %s, %1$s).  
+- Maintain the integrity of HTML, CDATA, or XML structures; translate only the textual content.  
+- Preserve all whitespace, line breaks, and XML formatting exactly as in the source.  
+- Escape apostrophes with a backslash (\\') as required by Android.
 
-4. **Terminology & Natural Expressions:**  
-   Use correct, context-appropriate terminology. Avoid literal translations that sound unnatural. Prioritize commonly used phrasing over word-for-word accuracy.  
-   When a technical term (e.g., "upload", "server") is more natural untranslated, keep it in English.
+**System Terms:**  
+Do not translate system state words (e.g., WARNING, FAILED, SUCCESS, PAUSED, RUNNING). They must remain in English and in uppercase.
 
-   **Examples (Portuguese of Portugal):**
-   - "Day Limit" → ✅ "Limite diário" (❌ "Limite do dia")
-   - "Network Connection" → ✅ "Ligação de rede" (❌ "Conexão de rede")
-   - "Start Time" → ✅ "Hora de início" (❌ "Hora de começar")
-   - "Message Sent" → ✅ "Mensagem enviada" (❌ "Mensagem foi enviada")
-   - "Upload Speed" → ✅ "Velocidade de upload" (❌ "Velocidade de envio")
+**Terminology & Natural Expressions:**  
+Use natural, context-appropriate phrasing and avoid literal translations that sound awkward or unnatural. 
+When a technical term (e.g., "upload", "server") or a proper noun, feature name, or trademarked term is more natural in English, keep it in English.
 
-5. **Dialect and Regional Vocabulary:**  
-   Use native vocabulary for the specified dialect (e.g., **Português de Portugal**), avoiding terms from other variants.
+**Examples (Portuguese of Portugal):**  
+- "Day Limit" → ✅ "Limite diário" (❌ "Limite do dia")  
+- "Network Connection" → ✅ "Ligação de rede" (❌ "Conexão de rede")  
+- "Start Time" → ✅ "Hora de início" (❌ "Hora de começar")  
+- "Message Sent" → ✅ "Mensagem enviada" (❌ "Mensagem foi enviada")  
+- "Upload Speed" → ✅ "Velocidade de upload" (❌ "Velocidade de envio")
 
-6. **General Note:**  
+**Dialect and Regional Vocabulary:**  
+Unless otherwise specified, use always the vocabulary appropriate to the target dialect (e.g., **pt -> Português de Portugal**) and avoid terms from other variants.
+
+**General Note:**  
 Preserve all proper nouns, feature names, and trademarked or branded terms in their original English form.
 
-7. **Output Requirements:**  
-   Return ONLY the final translated text as a single plain line, preserving any required formatting from the source.
-
+**Output Requirements:**  
+Return ONLY the final translated text as a single plain line, preserving any required formatting from the source.
 """
 
 PLURAL_GUIDELINES_ADDITION = """\
-7. **Plural Resources:**
-   For plural translations, if the source resource contains only a single plural key (e.g., "other") but the target language requires multiple plural forms, return all the appropriate plural keys for the target language.
-   *Example:* If the English source is `<item quantity="other">%d day left</item>`, the Portuguese translation should include both `<item quantity="one">%d dia restante</item>` and `<item quantity="many">%d dias restantes</item>`. Ensure that each plural form reflects the proper singular and plural usage with the correct one, many etc as defined by the target language's standard usage. Use the target language's pluralization guidelines as a reference to determine which keys to include and their corresponding forms.
-   The full set supported by Android is zero, one, two, few, many, and other.
+For plural resources, follow these guidelines:
 
-8. **Output Requirements:**
-   Return ONLY a JSON object containing the translated plural mapping as a single plain line. Do not include any markdown formatting, code blocks, or additional commentary, except if any such formatting is already present in the source string provided.
+1. **Plural Keys:**  
+   If the source resource contains only a single plural key (e.g., "other") but the target language requires multiple forms, include all necessary plural keys as defined by the target language's pluralization rules.  
+   *Example:* If the English source is `<item quantity="other">%d day left</item>`, the target translation should include:
+   - `<item quantity="zero">No days left</item>`
+   - `<item quantity="one">%d day left</item>`
+   - `<item quantity="many">%d days left</item>`
+   (Adjust the text according to correct singular and plural usage in the target language. Refer to the target language's guidelines for keys such as zero, one, two, few, many, and other.)
+
+2. **Output Format:**  
+   Return ONLY a JSON object containing the plural mapping as a single plain line. Do not include any markdown formatting, code blocks, or additional commentary unless already present in the source.
 """
 
 SYSTEM_MESSAGE_TEMPLATE = """\
-You are a software engineer translating textual UI elements within an Android from English into {target_language} while keeping technical terms in English.
+You are a professional translator translating textual UI elements within an Android from English into {target_language}. Follow user guidelines closely.
 """
 
 TRANSLATE_FINAL_TEXT = """\

@@ -27,17 +27,17 @@ Follow these guidelines carefully.
 This translation is for an Android application's UI. Use concise, clear language consistent with standard Android UI conventions. Do not alter the intended meaning of the text.
 
 **Formatting & Structure:**  
-- Preserve all placeholders exactly as they appear (e.g., %d, %s, %1$s).  
+- Keep all placeholders (e.g., %d, %s, %1$s) exactly as in the source. If the target language requires reordering, ensure that the same placeholders appear and are correctly positioned according to the language's syntax.
 - Maintain the integrity of HTML, CDATA, or XML structures; translate only the textual content.  
 - Preserve all whitespace, line breaks, and XML formatting exactly as in the source.  
 - Escape apostrophes with a backslash (\\') as required by Android.
 
 **System Terms:**  
-Do not translate system state words (e.g., WARNING, FAILED, SUCCESS, PAUSED, RUNNING). They must remain in English and in uppercase.
+Do not translate system state words (e.g., WARNING, FAILED, SUCCESS) or any technical and branded terms. Always leave these in their original English, uppercase form.
 
 **Terminology & Natural Expressions:**  
-Use natural, context-appropriate phrasing and avoid literal translations that sound awkward or unnatural. 
-When a technical term (e.g., "upload", "server") or a proper noun, feature name, or trademarked term is more natural in English, keep it in English.
+Translate in a natural, concise style that matches standard Android UI conventions. 
+Avoid overly literal translations that may sound awkward. When a technical term or proper noun is more recognizable in English for that language, keep it in English.
 
 **Examples (Portuguese of Portugal):**  
 - "Day Limit" → ✅ "Limite diário" (❌ "Limite do dia")  
@@ -76,7 +76,7 @@ You are a professional translator translating textual UI elements within an Andr
 """
 
 TRANSLATE_FINAL_TEXT = """\
-Translate the following resource for an Android app provided after the dashed line to the following values-{target_language}/string.xml for the language: {target_language}
+Translate the following string resource provided after the dashed line to the values-{target_language}/string.xml file for the language: {target_language}
 ----------
 """
 

@@ -21,8 +21,7 @@ from lxml import etree
 # ------------------------------------------------------------------------------
 
 TRANSLATION_GUIDELINES = """\
-Follow the guidelines below closely.
-
+Follow these guidelines carefully.
 Guidelines:
 1. **Purpose & Context:**  
    The translation is for an Android application's UI. Use terminology and phrasing consistent with android applications. Do not change the meaning of the text.
@@ -49,29 +48,33 @@ Guidelines:
 5. **Dialect and Regional Vocabulary:**  
    Use native vocabulary for the specified dialect (e.g., **Português de Portugal**), avoiding terms from other variants.
 
-6. **Output Requirements:**  
+6. **General Note:**  
+Preserve all proper nouns, feature names, and trademarked or branded terms in their original English form.
+
+7. **Output Requirements:**  
    Return ONLY the final translated text as a single plain line, preserving any required formatting from the source.
 
 """
 
 PLURAL_GUIDELINES_ADDITION = """\
-6. **Plural Resources:**
+7. **Plural Resources:**
    For plural translations, if the source resource contains only a single plural key (e.g., "other") but the target language requires multiple plural forms, return all the appropriate plural keys for the target language.
    *Example:* If the English source is `<item quantity="other">%d day left</item>`, the Portuguese translation should include both `<item quantity="one">%d dia restante</item>` and `<item quantity="many">%d dias restantes</item>`. Ensure that each plural form reflects the proper singular and plural usage with the correct one, many etc as defined by the target language's standard usage. Use the target language's pluralization guidelines as a reference to determine which keys to include and their corresponding forms.
    The full set supported by Android is zero, one, two, few, many, and other.
 
-7. **Output Requirements:**
+8. **Output Requirements:**
    Return ONLY a JSON object containing the translated plural mapping as a single plain line. Do not include any markdown formatting, code blocks, or additional commentary, except if any such formatting is already present in the source string provided.
 """
 
 SYSTEM_MESSAGE_TEMPLATE = """\
-You are a software engineer translating textual UI elements within a software application from English into {target_language} while keeping technical terms in English.
+You are a software engineer translating textual UI elements within an Android from English into {target_language} while keeping technical terms in English.
 """
 
 TRANSLATE_FINAL_TEXT = """\
-Translate the following resource for an Android app provided after the dashed line to the following values-{target_language}/string.xml language: {target_language}
+Translate the following resource for an Android app provided after the dashed line to the following values-{target_language}/string.xml for the language: {target_language}
 ----------
 """
+
 # ------------------------------------------------------------------------------
 # Logger Setup
 # ------------------------------------------------------------------------------
@@ -354,7 +357,7 @@ def indent_xml(elem: ElementTree.Element, level: int = 0) -> None:
 # Translation & OpenAI API Integration
 # ------------------------------------------------------------------------------
 
-def call_openai(prompt: str, system_message: str, api_key: str, model: str = "gpt-3.5-turbo") -> str:
+def call_openai(prompt: str, system_message: str, api_key: str, model: str) -> str:
     """
     Helper function to call the OpenAI API with the given prompt and system message.
     Returns the response text.
@@ -613,7 +616,6 @@ def create_translation_report(translation_log):
         for lang, details in languages.items():
             report += f"### Language: {lang}\n\n"
             if details.get("strings"):
-                report += "#### Strings\n\n"
                 report += "| Key | Source Text | Translated Text |\n"
                 report += "| --- | ----------- | --------------- |\n"
                 for entry in details["strings"]:
@@ -654,7 +656,7 @@ def main() -> None:
         validate_translations = False  
         log_trace = os.environ.get("INPUT_LOG_TRACE", "false").lower() == "true"
         openai_api_key = os.environ.get("OPENAI_API_KEY")
-        openai_model = os.environ.get("INPUT_OPENAI_MODEL", "gpt-3.5-turbo")
+        openai_model = os.environ.get("INPUT_OPENAI_MODEL", "gpt-4o-mini")
         project_context = os.environ.get("INPUT_PROJECT_CONTEXT", "")
         ignore_folders = [folder.strip() for folder in os.environ.get("INPUT_IGNORE_FOLDERS", "build").split(',') if folder.strip()]
     else:
@@ -668,7 +670,7 @@ def main() -> None:
                             help="Enable manual validation for OpenAI returned translations before saving into the XML file")
         parser.add_argument("-l", "--log-trace", action="store_true",
                             help="Log detailed trace information about operations including requests and responses with OpenAI")
-        parser.add_argument("--openai-model", default="gpt-3.5-turbo",
+        parser.add_argument("--openai-model", default="gpt-4o-mini",
                             help="Specify the OpenAI model to use for translation.")
         parser.add_argument("--project-context", default="",
                             help="Specify additional project context to include in translation prompts.")

@@ -108,6 +108,7 @@ class AndroidResourceFile:
         self.language: str = language
         self.strings: Dict[str, str] = {}          # key -> string value
         self.plurals: Dict[str, Dict[str, str]] = {} # key -> {quantity -> text}
+        self.modified: bool = False  # Flag to track if any changes are made
         self.parse_file()
 
     def parse_file(self) -> None:
@@ -235,6 +236,11 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
     This version uses lxml and makes sure that if new elements are appended, the first new element is
     correctly indented.
     """
+
+    # Only update if the resource was modified
+    if not resource.modified:
+        return
+
     try:
         parser = etree.XMLParser(remove_blank_text=False)
         tree = etree.parse(str(resource.path), parser)
@@ -331,6 +337,8 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
             f.truncate()
         
         logger.info(f"Updated XML file: {resource.path}")
+        # Reset the modified flag after update.
+        resource.modified = False
     except Exception as e:
         logger.error(f"Error writing XML file {resource.path}: {e}")
 
@@ -511,6 +519,7 @@ def auto_translate_resources(
                             translated = validate_translation(source_text, translated, target_language=lang)
                             logger.info(f"Validated string '{key}': now '{translated}'")
                         res.strings[key] = translated
+                        res.modified = True  # Mark as modified
 
                         # Record the translation for reporting.
                         translation_log[module.name][lang]["strings"].append({
@@ -536,6 +545,7 @@ def auto_translate_resources(
                             merged = generated_plural.copy()
                             merged.update(current_map)
                             res.plurals[plural_name] = merged
+                            res.modified = True  # Mark as modified
                             logger.info(f"Translated plural group '{plural_name}' for language '{lang}': {res.plurals[plural_name]}")
                             if validate_translations:
                                 for plural_key in generated_plural:
@@ -552,7 +562,9 @@ def auto_translate_resources(
                             })
                         except Exception as e:
                             logger.error(f"Error translating plural '{plural_name}': {e}")
-                update_xml_file(res)
+                # Only update the XML file if modifications were made.
+                if res.modified:
+                    update_xml_file(res)
     return translation_log
 
 # ------------------------------------------------------------------------------

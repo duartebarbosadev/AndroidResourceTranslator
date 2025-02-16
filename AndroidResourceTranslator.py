@@ -21,11 +21,11 @@ from lxml import etree
 # ------------------------------------------------------------------------------
 
 TRANSLATION_GUIDELINES = """\
-Translate the following resource for an Android app provided after the dashed line to {target_language}.
+Follow the guidelines below closely.
 
 Guidelines:
 1. **Purpose & Context:**  
-   The translation is for an Android application's UI. Use terminology and phrasing consistent with software interfaces.
+   The translation is for an Android application's UI. Use terminology and phrasing consistent with android applications. Do not change the meaning of the text.
 
 2. **Formatting & Structure:**  
    - Preserve all placeholders (e.g., %d, %s, %1$s) exactly as they appear.  
@@ -51,7 +51,7 @@ Guidelines:
 
 6. **Output Requirements:**  
    Return ONLY the final translated text as a single plain line, preserving any required formatting from the source.
-----------
+
 """
 
 PLURAL_GUIDELINES_ADDITION = """\
@@ -62,13 +62,16 @@ PLURAL_GUIDELINES_ADDITION = """\
 
 7. **Output Requirements:**
    Return ONLY a JSON object containing the translated plural mapping as a single plain line. Do not include any markdown formatting, code blocks, or additional commentary, except if any such formatting is already present in the source string provided.
-----------
 """
 
 SYSTEM_MESSAGE_TEMPLATE = """\
 You are a software engineer translating textual UI elements within a software application from English into {target_language} while keeping technical terms in English.
 """
 
+TRANSLATE_FINAL_TEXT = """\
+Translate the following resource for an Android app provided after the dashed line to the following values-{target_language}/string.xml language: {target_language}
+----------
+"""
 # ------------------------------------------------------------------------------
 # Logger Setup
 # ------------------------------------------------------------------------------
@@ -381,7 +384,11 @@ def translate_text(text: str, target_language: str, api_key: str, model: str, pr
     if text.strip() == "":
         return ""
 
-    prompt = TRANSLATION_GUIDELINES.format(target_language=target_language) + text
+    prompt = (
+            TRANSLATION_GUIDELINES + 
+            TRANSLATE_FINAL_TEXT.format(target_language=target_language) + 
+            text
+    )
     system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=target_language)
     if project_context:
         system_message += f"\nProject context: {project_context}"
@@ -395,8 +402,9 @@ def translate_plural_text(source_plural: Dict[str, str], target_language: str, a
     """
     source_json = json.dumps(source_plural, indent=2)
     prompt = (
-        TRANSLATION_GUIDELINES.format(target_language=target_language) +
+        TRANSLATION_GUIDELINES +
         PLURAL_GUIDELINES_ADDITION +
+        TRANSLATE_FINAL_TEXT.format(target_language=target_language) + 
         source_json
     )
     system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=target_language)
@@ -490,7 +498,7 @@ def auto_translate_resources(
                             model=openai_model,
                             project_context=project_context,
                         )
-                        logger.info(f"Translated string '{key}': '{source_text}' -> '{translated}'")
+                        logger.info(f"Translated string '{key}' to {lang}: '{source_text}' -> '{translated}'")
                         if validate_translations:
                             translated = validate_translation(source_text, translated, target_language=lang)
                             logger.info(f"Validated string '{key}': now '{translated}'")

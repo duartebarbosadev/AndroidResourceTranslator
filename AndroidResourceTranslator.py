@@ -327,9 +327,10 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
         with open(resource.path, "r+", encoding="utf-8") as f:
             content = f.read()
             content = re.sub(
-                r"<\?xml version='1\.0' encoding='UTF-8'\?>",
+                r"<\?xml version=['\"]1\.0['\"] encoding=['\"]utf-8['\"]\?>",
                 '<?xml version="1.0" encoding="utf-8"?>',
-                content
+                content,
+                flags=re.IGNORECASE
             )
             f.seek(0)
             f.write(content)

@@ -17,9 +17,8 @@ from typing import Dict, Set, List
 from lxml import etree
 
 # ------------------------------------------------------------------------------
-# Configuration Constants
+# Translation Prompt Constants
 # ------------------------------------------------------------------------------
-
 TRANSLATION_GUIDELINES = """\
 Follow these guidelines carefully.
 
@@ -40,11 +39,10 @@ Translate in a natural, concise style that matches standard Android UI conventio
 Avoid overly literal translations that may sound awkward. When a technical term or proper noun is more recognizable in English for that language, keep it in English.
 
 **Examples (Portuguese of Portugal):**  
-- "Day Limit" → ✅ "Limite diário" (❌ "Limite do dia")  
-- "Network Connection" → ✅ "Ligação de rede" (❌ "Conexão de rede")  
-- "Start Time" → ✅ "Hora de início" (❌ "Hora de começar")  
 - "Message Sent" → ✅ "Mensagem enviada" (❌ "Mensagem foi enviada")  
 - "Upload Speed" → ✅ "Velocidade de upload" (❌ "Velocidade de envio")
+
+Always refer to standard, widely accepted terms for the target language's user interface.
 
 **Dialect and Regional Vocabulary:**  
 Unless otherwise specified, use always the vocabulary appropriate to the target dialect (e.g., **pt -> Português de Portugal**) and avoid terms from other variants.
@@ -55,6 +53,7 @@ Preserve all proper nouns, feature names, and trademarked or branded terms in th
 **Output Requirements:**  
 Return ONLY the final translated text as a single plain line, preserving any required formatting from the source.
 """
+
 
 PLURAL_GUIDELINES_ADDITION = """\
 For plural resources, follow these guidelines:

@@ -9,7 +9,6 @@ import logging
 import sys
 import json
 import re
-import logging
 from pathlib import Path
 from xml.etree import ElementTree
 from collections import defaultdict

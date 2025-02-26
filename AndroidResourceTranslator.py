@@ -9,7 +9,6 @@ import logging
 import sys
 import json
 import re
-import logging
 from pathlib import Path
 from xml.etree import ElementTree
 from collections import defaultdict
@@ -193,19 +192,96 @@ def detect_language_from_path(file_path: Path) -> str:
     return language
 
 
+def parse_gitignore(root_dir: str) -> List[str]:
+    """
+    Parse .gitignore files in the given directory and return a list of patterns.
+    """
+    gitignore_path = os.path.join(root_dir, ".gitignore")
+    if not os.path.exists(gitignore_path):
+        return []
+    
+    patterns = []
+    try:
+        with open(gitignore_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                # Skip empty lines and comments
+                if not line or line.startswith("#"):
+                    continue
+                patterns.append(line)
+        logger.debug(f"Parsed {len(patterns)} patterns from {gitignore_path}")
+    except Exception as e:
+        logger.warning(f"Error parsing .gitignore at {gitignore_path}: {e}")
+    
+    return patterns
+
+
+def is_ignored_by_gitignore(path: Path, gitignore_patterns: List[str]) -> bool:
+    """
+    Check if a path matches any pattern from .gitignore.
+    This is a simplified implementation that handles common cases.
+    For more complex gitignore pattern matching, a dedicated library would be needed.
+    """
+    if not gitignore_patterns:
+        return False
+        
+    # Convert path to string for matching
+    path_str = str(path)
+    path_parts = path_str.replace('\\', '/').split('/')
+    
+    for pattern in gitignore_patterns:
+        # Remove leading and trailing slashes
+        clean_pattern = pattern.strip('/')
+        
+        # Handle directory-specific patterns (ending with /)
+        if pattern.endswith('/'):
+            dir_pattern = clean_pattern
+            if dir_pattern in path_parts:
+                return True
+        # Handle wildcard patterns
+        elif '*' in pattern:
+            # Very basic wildcard handling - converting to regex
+            regex_pattern = pattern.replace('.', '\\.').replace('*', '.*')
+            if re.search(regex_pattern, path_str):
+                return True
+        # Simple substring match
+        elif clean_pattern in path_str:
+            return True
+    
+    return False
+
+
 def find_resource_files(resources_path: str, ignore_folders: List[str] = None) -> Dict[str, AndroidModule]:
     """
     Recursively search for strings.xml files in "values*" directories.
     Files whose paths contain any folder listed in ignore_folders are skipped.
+    If ignore_folders is not provided or empty, .gitignore patterns are used instead.
     Files are grouped by module and language.
     """
     resources_dir = Path(resources_path)
     modules: Dict[str, AndroidModule] = {}
     logger.info(f"Scanning for resource files in {resources_dir}")
-
+    
+    # Parse gitignore patterns only if ignore_folders is not provided
+    gitignore_patterns = []
+    if not ignore_folders:
+        gitignore_patterns = parse_gitignore(resources_path)
+        if gitignore_patterns:
+            logger.info(f"Using {len(gitignore_patterns)} patterns from .gitignore in {resources_path}")
+    else:
+        logger.info(f"Using explicit ignore folders: {', '.join(ignore_folders)}")
+    
     for xml_file_path in resources_dir.rglob("strings.xml"):
-        if ignore_folders and any(ignored in xml_file_path.parts for ignored in ignore_folders):
+        # If ignore_folders is provided, use only those
+        if ignore_folders and any(ignored in str(xml_file_path.parts) for ignored in ignore_folders):
+            logger.debug(f"Skipping {xml_file_path} (matched ignore_folders)")
             continue
+            
+        # If no ignore_folders provided, check gitignore patterns
+        elif gitignore_patterns and is_ignored_by_gitignore(xml_file_path, gitignore_patterns):
+            logger.debug(f"Skipping {xml_file_path} (matched gitignore pattern)")
+            continue
+            
         if not xml_file_path.parent.name.startswith("values"):
             continue
 
@@ -704,7 +780,8 @@ def main() -> None:
         openai_api_key = os.environ.get("OPENAI_API_KEY")
         openai_model = os.environ.get("INPUT_OPENAI_MODEL", "gpt-4o-mini")
         project_context = os.environ.get("INPUT_PROJECT_CONTEXT", "")
-        ignore_folders = [folder.strip() for folder in os.environ.get("INPUT_IGNORE_FOLDERS", "build").split(',') if folder.strip()]
+        ignore_folders_input = os.environ.get("INPUT_IGNORE_FOLDERS", "")
+        ignore_folders = [folder.strip() for folder in ignore_folders_input.split(',') if folder.strip()] if ignore_folders_input else []
 
         print(
             "Running with parameters from environment variables."
@@ -727,8 +804,9 @@ def main() -> None:
                             help="Specify the OpenAI model to use for translation.")
         parser.add_argument("--project-context", default="",
                             help="Additional project context for translation prompts.")
-        parser.add_argument("--ignore-folders", default="build",
-                            help="Comma separated list of folder names to ignore during scanning. (e.g. build).")
+        parser.add_argument("--ignore-folders", default="",
+                            help="Comma separated list of folder names to ignore during scanning. "
+                                 "If empty, .gitignore patterns will be used instead.")
         args = parser.parse_args()
         
         resources_paths = args.resources_paths

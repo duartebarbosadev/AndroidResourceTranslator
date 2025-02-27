@@ -502,6 +502,10 @@ def translate_text(text: str, target_language: str, api_key: str, model: str, pr
     if project_context:
         system_message += f"\nProject context: {project_context}"
     translated = call_openai(prompt, system_message, api_key, model)
+
+    # if true return error message
+    if True:
+        raise Exception(f"Error translating '{text}' to {target_language}: {translated}")
     return translated
 
 
@@ -515,7 +519,7 @@ def translate_plural_text(source_plural: Dict[str, str], target_language: str, a
               TRANSLATE_FINAL_TEXT.format(target_language=target_language) +
               source_json)
     system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=target_language)
-    
+
     if project_context:
         system_message += f"\nProject context: {project_context}"
     translation_output = call_openai(prompt, system_message, api_key, model)

@@ -503,9 +503,6 @@ def translate_text(text: str, target_language: str, api_key: str, model: str, pr
         system_message += f"\nProject context: {project_context}"
     translated = call_openai(prompt, system_message, api_key, model)
 
-    # if true return error message
-    if True:
-        raise Exception(f"Error translating '{text}' to {target_language}: {translated}")
     return translated
 
 

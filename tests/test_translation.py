@@ -67,7 +67,8 @@ class TestTranslation(unittest.TestCase):
     @patch('AndroidResourceTranslator.translate_text')
     @patch('AndroidResourceTranslator.translate_plural_text')
     @patch('AndroidResourceTranslator.update_xml_file')
-    def test_auto_translate_resources(self, mock_update_xml, mock_translate_plural, mock_translate_text):
+    @patch('AndroidResourceTranslator.AndroidResourceFile.parse_file')
+    def test_auto_translate_resources(self, mock_parse_file, mock_update_xml, mock_translate_plural, mock_translate_text):
         mock_translate_text.return_value = "Translated text"
         mock_translate_plural.return_value = {"one": "Translated one", "other": "Translated other"}
         modules = {"test_module": AndroidModule("test_module")}

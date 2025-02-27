@@ -71,24 +71,6 @@ class TestXmlFormatting(unittest.TestCase):
             
             # The XML declaration should be standardized to double quotes
             self.assertTrue(updated_content.startswith('<?xml version="1.0" encoding="utf-8"?>'))
-    
-    def test_handle_empty_file(self):
-        """Test handling of an empty or malformed XML file"""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            xml_path = Path(temp_dir) / "strings.xml"
-            
-            # Create an empty file
-            with open(xml_path, "w") as f:
-                f.write("")
-            
-            # Create resource with new strings
-            resource = AndroidResourceFile(xml_path)
-            # The parse should fail, but update should handle it gracefully
-            resource.strings["test"] = "Test"
-            resource.modified = True
-            
-            # This shouldn't raise an exception
-            update_xml_file(resource)
 
 if __name__ == "__main__":
     unittest.main()

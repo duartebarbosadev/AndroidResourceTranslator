@@ -142,8 +142,10 @@ class AndroidResourceFile:
             logger.debug(f"Parsed {len(self.strings)} strings and {len(self.plurals)} plurals from {self.path}")
         except ElementTree.ParseError as pe:
             logger.error(f"XML parse error in {self.path}: {pe}")
+            raise
         except Exception as e:
             logger.error(f"Error parsing {self.path}: {e}")
+            raise
 
     def summary(self) -> Dict[str, int]:
         """Return a summary of resource counts."""
@@ -213,6 +215,7 @@ def parse_gitignore(root_dir: str) -> List[str]:
         logger.debug(f"Parsed {len(patterns)} patterns from {gitignore_path}")
     except Exception as e:
         logger.warning(f"Error parsing .gitignore at {gitignore_path}: {e}")
+        raise
     
     return patterns
 
@@ -338,7 +341,7 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
         root = tree.getroot()
     except Exception as e:
         logger.error(f"Error reading XML file {resource.path}: {e}")
-        return
+        raise
 
     # Determine sample indentation from an existing child of <resources>; default to 4 spaces.
     sample_indent = "    "
@@ -427,6 +430,7 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
         resource.modified = False
     except Exception as e:
         logger.error(f"Error writing XML file {resource.path}: {e}")
+        raise
 
 
 def indent_xml(elem: ElementTree.Element, level: int = 0) -> None:
@@ -482,7 +486,7 @@ def call_openai(prompt: str, system_message: str, api_key: str, model: str) -> s
         return "ERROR: OpenAI package not installed"
     except Exception as e:
         logger.error(f"Error calling OpenAI API: {e}")
-        return f"ERROR: {str(e)}"
+        raise
 
 
 def translate_text(text: str, target_language: str, api_key: str, model: str, project_context: str, source_language: str = "English") -> str:
@@ -511,6 +515,7 @@ def translate_plural_text(source_plural: Dict[str, str], target_language: str, a
               TRANSLATE_FINAL_TEXT.format(target_language=target_language) +
               source_json)
     system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=target_language)
+    
     if project_context:
         system_message += f"\nProject context: {project_context}"
     translation_output = call_openai(prompt, system_message, api_key, model)
@@ -519,7 +524,7 @@ def translate_plural_text(source_plural: Dict[str, str], target_language: str, a
         return plural_dict if isinstance(plural_dict, dict) else {"other": translation_output}
     except Exception as e:
         logger.error(f"Error parsing plural translation JSON: {e}. Falling back to single form.")
-        return {"other": translation_output}
+        raise
 
 # ------------------------------------------------------------------------------
 # Translation Validation
@@ -614,6 +619,7 @@ def auto_translate_resources(modules: Dict[str, AndroidModule],
                         })
                     except Exception as e:
                         logger.error(f"Error translating string '{key}': {e}")
+                        raise
 
                 for plural_name, default_map in module_default_plurals.items():
                     current_map = res.plurals.get(plural_name, {})
@@ -642,6 +648,7 @@ def auto_translate_resources(modules: Dict[str, AndroidModule],
                             })
                         except Exception as e:
                             logger.error(f"Error translating plural '{plural_name}': {e}")
+                            raise
                 if res.modified:
                     update_xml_file(res)
     

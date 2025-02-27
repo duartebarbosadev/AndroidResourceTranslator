@@ -51,7 +51,8 @@ class TestReporting(unittest.TestCase):
         self.assertIn("days", report)
         self.assertIn("%d día", report)
     
-    def test_check_missing_translations(self):
+    @patch('AndroidResourceTranslator.AndroidResourceFile.parse_file')    
+    def test_check_missing_translations(self, mock_parse_file):
         """Test identifying missing translations in modules."""
         # Create test modules with missing translations
         modules = {}

@@ -4,7 +4,6 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
 
 jobs:
   build:
@@ -24,19 +23,13 @@ jobs:
         pip install -r requirements.txt
 
     - name: Run Python unit tests
-      run: python3 -u -m unittest tests/tests.py
+      run: |
+        python3 -u -m unittest tests/test_report.py
+        python3 -u -m unittest tests/test_resource_parser.py
+        python3 -u -m unittest tests/test_translation.py
+        python3 -u -m unittest tests/test_xml_formatting.py
+        python3 -u -m unittest tests/test_gitignore.py
+        python3 -u -m unittest tests/test_integration.py
 
     - name: Verify that the Docker image for the action builds
       run: docker build . --file Dockerfile
-
-    #- name: Integration test
-      #id: integration
-      #uses: ./
-
-    #- name: Output the outputs of the integration test of the action
-      #run: |
-        #echo "output-one = ${{ steps.integration.outputs.output-one }}"
-        #echo "output-two = ${{ steps.integration.outputs.output-two }}"
-
-    - name: Verify integration test results
-      run: python3 -u -m unittest tests/integration.py

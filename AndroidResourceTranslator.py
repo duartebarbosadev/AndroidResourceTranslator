@@ -9,6 +9,7 @@ import logging
 import sys
 import json
 import re
+import os
 from pathlib import Path
 from xml.etree import ElementTree
 from collections import defaultdict
@@ -225,9 +226,9 @@ def is_ignored_by_gitignore(path: Path, gitignore_patterns: List[str]) -> bool:
     if not gitignore_patterns:
         return False
         
-    # Convert path to string for matching
-    path_str = str(path)
-    path_parts = path_str.replace('\\', '/').split('/')
+    # Convert path to string for matching and normalize separators
+    path_str = str(path).replace('\\', '/')
+    path_parts = path_str.split('/')
     
     for pattern in gitignore_patterns:
         # Remove leading and trailing slashes
@@ -236,17 +237,40 @@ def is_ignored_by_gitignore(path: Path, gitignore_patterns: List[str]) -> bool:
         # Handle directory-specific patterns (ending with /)
         if pattern.endswith('/'):
             dir_pattern = clean_pattern
-            if dir_pattern in path_parts:
+            if any(part == dir_pattern for part in path_parts):
                 return True
+        
+        # Handle glob patterns with /**
+        elif "/**" in pattern:
+            base_path = pattern.replace("/**", "")
+            if path_str.startswith(base_path):
+                return True
+                
         # Handle wildcard patterns
         elif '*' in pattern:
-            # Very basic wildcard handling - converting to regex
-            regex_pattern = pattern.replace('.', '\\.').replace('*', '.*')
-            if re.search(regex_pattern, path_str):
+            # Convert glob pattern to regex
+            regex_pattern = pattern.replace('.', '\\.')\
+                                 .replace('*', '.*')\
+                                 .replace('/', '\\/')
+            if re.search(f"^{regex_pattern}$", path_str) or \
+               re.search(f"/{regex_pattern}$", path_str) or \
+               re.search(f"^{regex_pattern}/", path_str) or \
+               re.search(f"/{regex_pattern}/", path_str):
                 return True
-        # Simple substring match
+                
+            # Special case for *.ext patterns
+            if pattern.startswith('*.'):
+                ext = pattern[1:]  # Get the extension including the dot
+                if path_str.endswith(ext):
+                    return True
+        
+        # Simple substring match for non-wildcard patterns
         elif clean_pattern in path_str:
-            return True
+            # Avoid matching substrings of path parts
+            if ('/' + clean_pattern) in path_str or \
+               (clean_pattern + '/') in path_str or \
+               path_str == clean_pattern:
+                return True
     
     return False
 
@@ -271,6 +295,13 @@ def find_resource_files(resources_path: str, ignore_folders: List[str] = None) -
     else:
         logger.info(f"Using explicit ignore folders: {', '.join(ignore_folders)}")
     
+    # Use the resolved root directory as the module grouping
+    module_path = resources_dir.resolve()
+    module_name = module_path.name
+    path_key = str(module_path)
+    if path_key not in modules:
+        modules[path_key] = AndroidModule(module_name, identifier=path_key)
+    
     for xml_file_path in resources_dir.rglob("strings.xml"):
         # If ignore_folders is provided, use only those
         if ignore_folders and any(ignored in str(xml_file_path.parts) for ignored in ignore_folders):
@@ -286,15 +317,6 @@ def find_resource_files(resources_path: str, ignore_folders: List[str] = None) -
             continue
 
         language = detect_language_from_path(xml_file_path)
-        try:
-            module_path = xml_file_path.parent.parent.parent  # e.g. module/src/main/res
-        except Exception:
-            module_path = xml_file_path.parent
-        module_name = module_path.name
-        path_key = str(module_path.resolve())
-        if path_key not in modules:
-            modules[path_key] = AndroidModule(module_name, identifier=path_key)
-            logger.debug(f"Created module entry for {module_name} (path: {path_key})")
         resource_file = AndroidResourceFile(xml_file_path, language)
         modules[path_key].add_resource(language, resource_file)
     return modules
@@ -436,24 +458,31 @@ def call_openai(prompt: str, system_message: str, api_key: str, model: str) -> s
     """
     Call the OpenAI API with the given prompt and system message.
     """
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key)
-    logger.debug(
-        f"Sending request to OpenAI with system prompt: {system_message} and user prompt:\n{prompt}"
-    )
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0,
-    )
-    translation = response.choices[0].message.content.strip()
-    logger.debug(f"Received response from OpenAI: {translation}")
-    logger.debug("\n-------\n")
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        logger.debug(
+            f"Sending request to OpenAI with system prompt: {system_message} and user prompt:\n{prompt}"
+        )
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0,
+        )
+        translation = response.choices[0].message.content.strip()
+        logger.debug(f"Received response from OpenAI: {translation}")
+        logger.debug("\n-------\n")
 
-    return translation
+        return translation
+    except ImportError:
+        logger.error("OpenAI package not installed. Please install it using 'pip install openai'.")
+        return "ERROR: OpenAI package not installed"
+    except Exception as e:
+        logger.error(f"Error calling OpenAI API: {e}")
+        return f"ERROR: {str(e)}"
 
 
 def translate_text(text: str, target_language: str, api_key: str, model: str, project_context: str, source_language: str = "English") -> str:
@@ -644,13 +673,15 @@ def auto_translate_resources(modules: Dict[str, AndroidModule],
 # Missing Translation Report
 # ------------------------------------------------------------------------------
 
-def check_missing_translations(modules: Dict[str, AndroidModule]) -> None:
+def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
     """
     For each module, compare non-default language resources against the union of keys
     in the default language. Checks for missing <string> keys and missing plural quantities.
+    Returns a dictionary of missing translations for potential reporting.
     """
     logger.info("Missing Translations Report")
     missing_count = 0
+    missing_report = {}
     
     for module in modules.values():
         module_has_missing = False
@@ -696,6 +727,14 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> None:
                                                             for k, v in missing_plurals.items()])
                                if missing_plurals else "")
                 module_log_lines.append(f"  [{lang}]: missing {missing_str}{missing_plu}")
+                
+                # Add to the report dictionary
+                if module.name not in missing_report:
+                    missing_report[module.name] = {}
+                missing_report[module.name][lang] = {
+                    "strings": list(missing_strings),
+                    "plurals": {name: list(quantities) for name, quantities in missing_plurals.items()}
+                }
         
         if module_has_missing:
             logger.info(f"Module: {module.name} (has missing translations)")
@@ -704,6 +743,8 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> None:
     
     if missing_count == 0:
         logger.info("All translations are complete.")
+        
+    return missing_report
 
 # ------------------------------------------------------------------------------
 # Translation Report Generator
@@ -807,6 +848,8 @@ def main() -> None:
         parser.add_argument("--ignore-folders", default="",
                             help="Comma separated list of folder names to ignore during scanning. "
                                  "If empty, .gitignore patterns will be used instead.")
+        parser.add_argument("--openai-api-key", dest="openai_api_key", default=None,
+                            help="OpenAI API key to use for translation.")
         args = parser.parse_args()
         
         resources_paths = args.resources_paths
@@ -816,7 +859,7 @@ def main() -> None:
         openai_model = args.openai_model
         project_context = args.project_context
         ignore_folders = [folder.strip() for folder in args.ignore_folders.split(',') if folder.strip()]
-        openai_api_key = os.environ.get("OPENAI_API_KEY")
+        openai_api_key = args.openai_api_key or os.environ.get("OPENAI_API_KEY")
         print(f"Starting with arguments: {args}")
 
     configure_logging(log_trace)

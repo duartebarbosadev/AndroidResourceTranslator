@@ -29,6 +29,7 @@ jobs:
         python3 -u -m unittest tests/test_translation.py
         python3 -u -m unittest tests/test_xml_formatting.py
         python3 -u -m unittest tests/test_gitignore.py
+        python3 -u -m unittest tests/test_integration.py
 
     - name: Verify that the Docker image for the action builds
       run: docker build . --file Dockerfile

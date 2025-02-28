@@ -877,7 +877,12 @@ def main() -> None:
         project_context = args.project_context
         ignore_folders = [folder.strip() for folder in args.ignore_folders.split(',') if folder.strip()]
         openai_api_key = args.openai_api_key or os.environ.get("OPENAI_API_KEY")
-        print(f"Starting with arguments: {args}")
+
+        # Don't include the OpenAI api key if present
+        args_dict = vars(args)
+        if 'openai_api_key' in args_dict:
+            args_dict['openai_api_key'] = '***'
+        print(f"Starting with arguments: {args_dict}")
 
     configure_logging(log_trace)
 

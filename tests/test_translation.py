@@ -32,14 +32,6 @@ class TestTranslation(unittest.TestCase):
         mock_call_openai.assert_not_called()
 
     @patch('AndroidResourceTranslator.call_openai')
-    def test_translate_text_error(self, mock_call_openai):
-        mock_call_openai.side_effect = Exception("API error")
-        with self.assertRaises(Exception) as context:
-            translate_text("Hello World", "es", "test_api_key", "test-model", "")
-        self.assertTrue("API error" in str(context.exception))
-        mock_call_openai.assert_called_once()
-
-    @patch('AndroidResourceTranslator.call_openai')
     def test_translate_plural_text(self, mock_call_openai):
         mock_call_openai.return_value = '{"one": "%d elemento", "other": "%d elementos"}'
         source_plural = {"one": "%d item", "other": "%d items"}

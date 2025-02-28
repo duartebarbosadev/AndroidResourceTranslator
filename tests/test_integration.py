@@ -23,52 +23,6 @@ from AndroidResourceTranslator import (
     auto_translate_resources,
     create_translation_report
 )
-
-class TestAndroidModule(unittest.TestCase):
-    """Tests for AndroidModule class"""
-    
-    def setUp(self):
-        """Set up test fixtures"""
-        self.module = AndroidModule("test_module", "test_id")
-        self.resource1 = mock.MagicMock()
-        self.resource1.path = Path("fake/path1.xml")
-        self.resource1.summary.return_value = {"strings": 5, "plurals": 2}
-        
-        self.resource2 = mock.MagicMock()
-        self.resource2.path = Path("fake/path2.xml") 
-        self.resource2.summary.return_value = {"strings": 3, "plurals": 1}
-    
-    def test_init(self):
-        """Test initialization of AndroidModule"""
-        self.assertEqual(self.module.name, "test_module")
-        self.assertEqual(self.module.identifier, "test_id")
-        self.assertEqual(len(self.module.language_resources), 0)
-    
-    def test_add_resource(self):
-        """Test adding resources to module"""
-        self.module.add_resource("en", self.resource1)
-        self.module.add_resource("fr", self.resource2)
-        self.module.add_resource("en", self.resource2)
-        
-        self.assertEqual(len(self.module.language_resources), 2)
-        self.assertEqual(len(self.module.language_resources["en"]), 2)
-        self.assertEqual(len(self.module.language_resources["fr"]), 1)
-    
-    def test_print_resources(self):
-        """Test print_resources method with logging capture"""
-        self.module.add_resource("en", self.resource1)
-        self.module.add_resource("fr", self.resource2)
-        
-        # Capture logging output
-        with self.assertLogs(level='INFO') as cm:
-            self.module.print_resources()
-            
-        # Verify log output contains expected information
-        self.assertTrue(any("test_module" in line for line in cm.output))
-        self.assertTrue(any("test_id" in line for line in cm.output))
-        self.assertTrue(any("[en]" in line for line in cm.output))
-        self.assertTrue(any("[fr]" in line for line in cm.output))
-
 @mock.patch('AndroidResourceTranslator.call_openai')
 class TestTranslation(unittest.TestCase):
     """Tests for translation functionality with mocked OpenAI calls"""

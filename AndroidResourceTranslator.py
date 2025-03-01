@@ -60,7 +60,6 @@ Example:
 
 """
 
-
 PLURAL_GUIDELINES_ADDITION = """\
 For plural resources, follow these guidelines:
 
@@ -277,51 +276,55 @@ def is_ignored_by_gitignore(path: Path, gitignore_patterns: List[str]) -> bool:
     
     return False
 
-
 def find_resource_files(resources_path: str, ignore_folders: List[str] = None) -> Dict[str, AndroidModule]:
     """
     Recursively search for strings.xml files in "values*" directories.
     Files whose paths contain any folder listed in ignore_folders are skipped.
-    If ignore_folders is not provided or empty, .gitignore patterns are used instead.
-    Files are grouped by module and language.
+    This implementation assumes the fixed structure:
+      <module_name>/src/main/res/values(-locale)/strings.xml
+    and uses the directory five levels up from the strings.xml file as the module directory.
     """
     resources_dir = Path(resources_path)
     modules: Dict[str, AndroidModule] = {}
     logger.info(f"Scanning for resource files in {resources_dir}")
-    
-    # Parse gitignore patterns only if ignore_folders is not provided
-    gitignore_patterns = []
-    if not ignore_folders:
-        gitignore_patterns = parse_gitignore(resources_path)
-        if gitignore_patterns:
-            logger.info(f"Using {len(gitignore_patterns)} patterns from .gitignore in {resources_path}")
-    else:
+
+    # Use explicit ignore folders if provided; otherwise try .gitignore patterns.
+    gitignore_patterns = [] if ignore_folders else parse_gitignore(resources_path)
+    if ignore_folders:
         logger.info(f"Using explicit ignore folders: {', '.join(ignore_folders)}")
-    
-    # Use the resolved root directory as the module grouping
-    module_path = resources_dir.resolve()
-    module_name = module_path.name
-    path_key = str(module_path)
-    if path_key not in modules:
-        modules[path_key] = AndroidModule(module_name, identifier=path_key)
-    
+    elif gitignore_patterns:
+        logger.info(f"Using {len(gitignore_patterns)} patterns from .gitignore in {resources_dir}")
+
     for xml_file_path in resources_dir.rglob("strings.xml"):
-        # If ignore_folders is provided, use only those
+        # Skip file if it is in an ignored folder.
         if ignore_folders and any(ignored in str(xml_file_path.parts) for ignored in ignore_folders):
             logger.debug(f"Skipping {xml_file_path} (matched ignore_folders)")
             continue
-            
-        # If no ignore_folders provided, check gitignore patterns
         elif gitignore_patterns and is_ignored_by_gitignore(xml_file_path, gitignore_patterns):
             logger.debug(f"Skipping {xml_file_path} (matched gitignore pattern)")
             continue
-            
+
+        # Process only if the immediate parent folder starts with "values"
         if not xml_file_path.parent.name.startswith("values"):
             continue
 
         language = detect_language_from_path(xml_file_path)
+        
+        try:
+            # With a fixed structure, the module folder is 5 levels up from strings.xml.
+            module_path = xml_file_path.parents[4]
+        except Exception as e:
+            logger.error(f"Error determining module folder for {xml_file_path}: {e}")
+            raise
+
+        module_name = module_path.name
+        module_key = str(module_path.resolve())
+        if module_key not in modules:
+            modules[module_key] = AndroidModule(module_name, identifier=module_key)
+            logger.debug(f"Created module entry for '{module_name}' (key: {module_key})")
         resource_file = AndroidResourceFile(xml_file_path, language)
-        modules[path_key].add_resource(language, resource_file)
+        modules[module_key].add_resource(language, resource_file)
+    
     return modules
 
 
@@ -489,9 +492,9 @@ def call_openai(prompt: str, system_message: str, api_key: str, model: str) -> s
         raise
 
 
-def translate_text(text: str, target_language: str, api_key: str, model: str, project_context: str, source_language: str = "English") -> str:
+def translate_text(text: str, target_language: str, api_key: str, model: str, project_context: str) -> str:
     """
-    Translate a simple string resource from source_language to target_language, following Android guidelines.
+    Translate a simple string resource to target_language, following the prompt above.
     """
     if text.strip() == "":
         return ""
@@ -537,7 +540,8 @@ def validate_translation(source_text: str, current_translation: str, target_lang
     then asks if the translation is acceptable. If not, the user can input a corrected version.
     """
     print("\n----- Validate Translation -----")
-    print(f"Source Text: {source_text}")
+    resource_type = "Plural Resource" if is_plural else "String Resource"
+    print(f"Source {resource_type}: {source_text}")
     print(f"Current Translation in {target_language}: {current_translation}")
     response = input("Do you accept this translation? (y/n): ").strip().lower()
     if response == "y":
@@ -656,7 +660,7 @@ def auto_translate_resources(modules: Dict[str, AndroidModule],
     # After processing all modules, add detailed log for translated resource names.
     if total_translated > 0:
         translated_info = {}
-        for mod, lang_details in translation_log.items():
+        for lang_details in translation_log.items():
             for lang, details in lang_details.items():
                 entry = translated_info.setdefault(lang, {'strings': set(), 'plurals': set()})
                 for s in details.get("strings", []):
@@ -815,6 +819,11 @@ def create_translation_report(translation_log):
 # ------------------------------------------------------------------------------
 
 def main() -> None:
+    """
+    Main entry point for the Android Resource Translator script.
+    Parses command-line arguments or environment variables, finds resource files,
+    checks for missing translations, and auto-translates them.
+    """
     import os
     import argparse
 

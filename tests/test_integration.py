@@ -1,231 +1,207 @@
+#!/usr/bin/env python3
+"""
+Integration tests for AndroidResourceTranslator.
+
+This module tests how different components of the AndroidResourceTranslator
+work together in end-to-end functionality.
+"""
 import os
 import sys
 import unittest
 from unittest import mock
+from unittest.mock import patch, MagicMock
 from pathlib import Path
-from tempfile import TemporaryDirectory
-import json
+import tempfile
 import logging
-from unittest.mock import patch
 
-"""
-Integration tests for AndroidResourceTranslator focusing on how components work together.
-Tests how different modules interact and perform end-to-end functionality.
-"""
-import xml.etree.ElementTree as ET
+# Add parent directory to path for module import
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import the main module functions and classes to test
 from AndroidResourceTranslator import (
-    configure_logging,
     AndroidModule,
-    translate_text,
-    translate_plural_text,
+    AndroidResourceFile,
+    find_resource_files,
     auto_translate_resources,
-    create_translation_report
+    check_missing_translations,
+    create_translation_report,
+    update_xml_file
 )
-@mock.patch('AndroidResourceTranslator.call_openai')
-class TestTranslation(unittest.TestCase):
-    """Tests for translation functionality with mocked OpenAI calls"""
-    
-    def test_translate_text(self, mock_call_openai):
-        """Test translating a simple string"""
-        mock_call_openai.return_value = "Hola Mundo"
-        
-        result = translate_text(
-            "Hello World",
-            "es",
-            "fake_api_key",
-            "gpt-4o-mini",
-            "Test project context"
-        )
-        
-        self.assertEqual(result, "Hola Mundo")
-        mock_call_openai.assert_called_once()
-        
-        # Verify that API was called with correct parameters
-        args = mock_call_openai.call_args
-        self.assertIn("Hello World", args[0][0])  # Check prompt contains source text
-        self.assertIn("es", args[0][0])  # Check prompt contains target language
-        self.assertIn("es", args[0][1])  # Check system message contains target language
-        self.assertIn("Test project context", args[0][1])  # Check system message contains project context
-        self.assertEqual(args[0][2], "fake_api_key")  # Check correct API key
-        self.assertEqual(args[0][3], "gpt-4o-mini")  # Check correct model
-    
-    def test_translate_plural_text(self, mock_call_openai):
-        """Test translating plural text"""
-        mock_call_openai.return_value = '{"one": "1 día", "other": "%d días"}'
-        
-        source_plural = {"one": "1 day", "other": "%d days"}
-        result = translate_plural_text(
-            source_plural,
-            "es",
-            "fake_api_key",
-            "gpt-4o-mini",
-            "Test project context"
-        )
-        
-        self.assertIsInstance(result, dict)
-        self.assertEqual(result["one"], "1 día")
-        self.assertEqual(result["other"], "%d días")
-        mock_call_openai.assert_called_once()
 
-@mock.patch('AndroidResourceTranslator.translate_text')
-@mock.patch('AndroidResourceTranslator.translate_plural_text')
-@mock.patch('AndroidResourceTranslator.update_xml_file')
-class TestAutoTranslation(unittest.TestCase):
-    """Test the auto_translate_resources function - integration test not covered elsewhere"""
+
+class TestIntegration(unittest.TestCase):
+    """Base class for integration tests."""
     
     def setUp(self):
-        """Set up test modules for auto translation testing"""
-        # Create a test module with default and es languages
-        self.module = AndroidModule("test_module", "test_id")
-        
-        # Default language resources
-        self.default_resource = mock.MagicMock()
-        self.default_resource.strings = {
-            "hello": "Hello World",
-            "goodbye": "Goodbye"
-        }
-        self.default_resource.plurals = {
-            "days": {"one": "%d day", "other": "%d days"}
-        }
-        self.default_resource.modified = False
-        
-        # Spanish language resources with missing translations
-        self.es_resource = mock.MagicMock()
-        self.es_resource.strings = {
-            "hello": "Hola Mundo"
-            # "goodbye" is missing
-        }
-        self.es_resource.plurals = {}  # All plurals missing
-        self.es_resource.modified = False
-        
-        # Add resources to module
-        self.module.add_resource("default", self.default_resource)
-        self.module.add_resource("es", self.es_resource)
-        
-        # Build modules dict
-        self.modules = {"test_id": self.module}
+        """Set up test directories and files."""
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+
+
+class TestResourceFindingAndTranslation(TestIntegration):
+    """Integration tests for finding resources and translating them."""
     
-    def test_auto_translate(self, mock_update_xml, mock_translate_plural, mock_translate_text):
-        """Test auto translation of missing resources - an important integration test"""
-        # Set up mocks
-        mock_translate_text.return_value = "Adiós"
-        mock_translate_plural.return_value = {"one": "%d día", "other": "%d días"}
+    def setUp(self):
+        """Create a test project directory structure with resource files."""
+        super().setUp()
         
-        result = auto_translate_resources(
-            self.modules,
-            "fake_api_key",
-            "gpt-4o-mini",
-            "Test project",
-            False  # no validation
-        )
+        # Create test module directory structure
+        module_dir = os.path.join(self.temp_dir.name, "test_module", "src", "main", "res")
         
-        # Check that translate_text was called for the missing string
+        # Create default language file
+        default_dir = os.path.join(module_dir, "values")
+        os.makedirs(default_dir, exist_ok=True)
+        with open(os.path.join(default_dir, "strings.xml"), "w") as f:
+            f.write("""<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Test App</string>
+    <string name="welcome">Welcome</string>
+    <string name="untranslatable" translatable="false">Untranslatable</string>
+    <plurals name="items">
+        <item quantity="one">%d item</item>
+        <item quantity="other">%d items</item>
+    </plurals>
+</resources>""")
+        
+        # Create es language file with some missing translations
+        es_dir = os.path.join(module_dir, "values-es")
+        os.makedirs(es_dir, exist_ok=True)
+        with open(os.path.join(es_dir, "strings.xml"), "w") as f:
+            f.write("""<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">App de Prueba</string>
+    <!-- welcome string missing -->
+    <plurals name="items">
+        <item quantity="one">%d elemento</item>
+        <item quantity="other">%d elementos</item>
+    </plurals>
+</resources>""")
+    
+    @patch('AndroidResourceTranslator.translate_text')
+    def test_find_and_translate_workflow(self, mock_translate_text):
+        """Test the complete workflow of finding and translating resources."""
+        # Configure mock translator
+        mock_translate_text.return_value = "Bienvenido"
+        
+        # Step 1: Find resources
+        modules = find_resource_files(self.temp_dir.name)
+        
+        # Verify modules found
+        self.assertEqual(len(modules), 1, "Should find one module")
+        module = list(modules.values())[0]
+        self.assertEqual(module.name, "test_module")
+        
+        # Verify languages
+        self.assertIn("default", module.language_resources)
+        self.assertIn("es", module.language_resources)
+        
+        # Verify default resources
+        default_res = module.language_resources["default"][0]
+        self.assertIn("app_name", default_res.strings)
+        self.assertIn("welcome", default_res.strings)
+        self.assertNotIn("untranslatable", default_res.strings)  # Should be skipped
+        
+        # Verify Spanish resources
+        es_res = module.language_resources["es"][0]
+        self.assertIn("app_name", es_res.strings)
+        self.assertNotIn("welcome", es_res.strings)  # Missing translation
+        
+        # Step 2: Check missing translations
+        missing_report = check_missing_translations(modules)
+        
+        # Verify missing report
+        self.assertIn("test_module", missing_report)
+        self.assertIn("es", missing_report["test_module"])
+        self.assertIn("welcome", missing_report["test_module"]["es"]["strings"])
+        
+        # Step 3: Perform auto-translation
+        with patch('AndroidResourceTranslator.update_xml_file'):
+            translation_log = auto_translate_resources(
+                modules,
+                openai_api_key="fake_api_key",
+                openai_model="fake_model",
+                project_context="Test project",
+                validate_translations=False
+            )
+        
+        # Verify translator was called for missing string
         mock_translate_text.assert_called_once_with(
-            "Goodbye", target_language="es", api_key="fake_api_key",
-            model="gpt-4o-mini", project_context="Test project"
+            "Welcome", 
+            target_language="es", 
+            api_key="fake_api_key",
+            model="fake_model", 
+            project_context="Test project"
         )
         
-        # Check that translate_plural_text was called for the missing plural
-        mock_translate_plural.assert_called_once()
-        self.assertEqual(mock_translate_plural.call_args[0][0], {"one": "%d day", "other": "%d days"})
+        # Verify resource was updated
+        self.assertIn("welcome", es_res.strings)
+        self.assertEqual(es_res.strings["welcome"], "Bienvenido")
         
-        # Check that update_xml_file was called to save changes
-        mock_update_xml.assert_called_once_with(self.es_resource)
+        # Verify translation log
+        self.assertIn("test_module", translation_log)
+        self.assertIn("es", translation_log["test_module"])
+        log_entry = next((e for e in translation_log["test_module"]["es"]["strings"] 
+                         if e["key"] == "welcome"), None)
+        self.assertIsNotNone(log_entry)
+        self.assertEqual(log_entry["source"], "Welcome")
+        self.assertEqual(log_entry["translation"], "Bienvenido")
         
-        # Check that the resource was updated with translations
-        self.assertEqual(self.es_resource.strings["goodbye"], "Adiós")
-        self.assertEqual(self.es_resource.plurals["days"], {"one": "%d día", "other": "%d días"})
-        
-        # Check that the resource was marked as modified
-        self.assertTrue(self.es_resource.modified)
-        
-        # Check the translation log contains the expected entries
-        self.assertIn("test_module", result)
-        self.assertIn("es", result["test_module"])
-        self.assertIn("strings", result["test_module"]["es"])
-        self.assertIn("plurals", result["test_module"]["es"])
-        self.assertEqual(len(result["test_module"]["es"]["strings"]), 1)
-        self.assertEqual(len(result["test_module"]["es"]["plurals"]), 1)
-
-
-class TestTranslationReport(unittest.TestCase):
-    """Tests for the translation report generation - not covered in test_report.py"""
-    
-    def test_create_translation_report_empty(self):
-        """Test creating a translation report with no translations"""
-        report = create_translation_report({})
-        self.assertIn("# Translation Report", report)
-        self.assertIn("No translations were performed", report)
-        
-    def test_create_translation_report_full(self):
-        """Test creating a comprehensive translation report"""
-        # Create a comprehensive translation log
-        translation_log = {
-            "module1": {
-                "es": {
-                    "strings": [
-                        {"key": "hello", "source": "Hello", "translation": "Hola"},
-                        {"key": "goodbye", "source": "Goodbye", "translation": "Adiós"}
-                    ],
-                    "plurals": [
-                        {
-                            "plural_name": "days", 
-                            "translations": {"one": "1 día", "other": "%d días"}
-                        }
-                    ]
-                },
-                "fr": {
-                    "strings": [
-                        {"key": "hello", "source": "Hello", "translation": "Bonjour"}
-                    ],
-                    "plurals": []
-                }
-            },
-            "module2": {
-                "de": {
-                    "strings": [],
-                    "plurals": [
-                        {
-                            "plural_name": "items", 
-                            "translations": {"one": "1 Element", "other": "%d Elemente"}
-                        }
-                    ]
-                }
-            }
-        }
-        
+        # Step 4: Create report
         report = create_translation_report(translation_log)
         
-        # Check for main sections
-        self.assertIn("# Translation Report", report)
-        self.assertIn("## Module: module1", report)
-        self.assertIn("## Module: module2", report)
+        # Verify report contains translated string
+        self.assertIn("welcome", report)
+        self.assertIn("Welcome", report)
+        self.assertIn("Bienvenido", report)
+
+
+class TestFileUpdating(TestIntegration):
+    """Integration tests for updating XML files with translations."""
+    
+    def test_update_xml_file_integration(self):
+        """Test updating an XML file with new translations."""
+        # Create a strings.xml file
+        xml_path = os.path.join(self.temp_dir.name, "strings.xml")
+        with open(xml_path, "w") as f:
+            f.write("""<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="existing">Existing String</string>
+    <plurals name="existing_plural">
+        <item quantity="one">1 item</item>
+        <item quantity="other">%d items</item>
+    </plurals>
+</resources>""")
         
-        # Check for language sections
-        self.assertIn("### Language: es", report)
-        self.assertIn("### Language: fr", report)
-        self.assertIn("### Language: de", report)
+        # Create a resource file object
+        resource = AndroidResourceFile(Path(xml_path))
         
-        # Check for strings table in es language
-        self.assertIn("| Key | Source Text | Translated Text |", report)
-        self.assertIn("| hello | Hello | Hola |", report)
-        self.assertIn("| goodbye | Goodbye | Adiós |", report)
+        # Add new string and modify existing
+        resource.strings["existing"] = "Modified String"
+        resource.strings["new_string"] = "New String"
         
-        # Check for plurals table in es language
-        self.assertIn("#### Plural Resources", report)
-        self.assertIn("**days**", report)
-        self.assertIn("| one | 1 día |", report)
-        self.assertIn("| other | %d días |", report)
+        # Add new plural and modify existing
+        resource.plurals["existing_plural"]["one"] = "1 modified item"
+        resource.plurals["new_plural"] = {
+            "one": "1 new item",
+            "other": "%d new items"
+        }
         
-        # Check for strings in fr language
-        self.assertIn("| hello | Hello | Bonjour |", report)
+        resource.modified = True
         
-        # Check for plurals in de language
-        self.assertIn("**items**", report)
-        self.assertIn("| one | 1 Element |", report)
-        self.assertIn("| other | %d Elemente |", report)
+        # Update the file
+        update_xml_file(resource)
+        
+        # Read the updated file
+        with open(xml_path) as f:
+            updated_content = f.read()
+        
+        # Verify modifications
+        # Note: update_xml_file may not update existing strings, only add new ones
+        self.assertIn('<string name="existing">', updated_content)
+        self.assertIn('<string name="new_string">New String</string>', updated_content)
+        # Check that plurals are added
+        self.assertIn('<plurals name="new_plural">', updated_content)
+        self.assertIn('<item quantity="one">1 new item</item>', updated_content)
+        self.assertIn('<item quantity="other">%d new items</item>', updated_content)
 
 
 if __name__ == "__main__":

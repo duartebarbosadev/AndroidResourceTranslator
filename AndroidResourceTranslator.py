@@ -660,7 +660,7 @@ def auto_translate_resources(modules: Dict[str, AndroidModule],
     # After processing all modules, add detailed log for translated resource names.
     if total_translated > 0:
         translated_info = {}
-        for lang_details in translation_log.items():
+        for module_name, lang_details in translation_log.items():
             for lang, details in lang_details.items():
                 entry = translated_info.setdefault(lang, {'strings': set(), 'plurals': set()})
                 for s in details.get("strings", []):

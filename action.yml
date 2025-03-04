@@ -15,6 +15,10 @@ inputs:
     description: "Comma-separated paths to the Android resource directories (e.g., './app/src/main/res, ./library/src/main/res')."
     required: false
     default: "${{ github.workspace }}"
+  auto_translate:
+    description: "Automatically translate missing resources. Set to 'true' to enable."
+    required: false
+    default: "true"
   log_trace:
     description: "Enable detailed logging. Set to 'true' to enable."
     required: false

@@ -5,3 +5,4 @@
 !Dockerfile
 !requirements.txt
 !AndroidResourceTranslator.py
+!git_utils.py

@@ -13,8 +13,17 @@ import os
 from pathlib import Path
 from xml.etree import ElementTree
 from collections import defaultdict
-from typing import Dict, Set, List
+from typing import Dict, Set, List, Tuple
 from lxml import etree
+
+# Import git utilities from separate module
+from git_utils import (
+    parse_gitignore, 
+    parse_gitignore_file, 
+    find_all_gitignores, 
+    is_ignored_by_gitignore, 
+    is_ignored_by_gitignores
+)
 
 # ------------------------------------------------------------------------------
 # Translation Prompt Constants
@@ -175,153 +184,144 @@ class AndroidModule:
 
 def detect_language_from_path(file_path: Path) -> str:
     """
-    Detect language from the folder name.
-      - "values"           -> "default"
-      - "values-es"        -> "es"
-      - "values-zh-rCN"    -> "zh-rCN"
-      - "values-b+sr+Latn" -> "b+sr+Latn"
+    Detect language code from an Android resource folder name.
+    
+    In Android, resource folders follow a naming convention to indicate 
+    the language they contain. This function extracts the language code 
+    from the folder name:
+    
+    Examples:
+      - "values"           -> "default" (base/source language, usually English)
+      - "values-es"        -> "es" (Spanish)
+      - "values-zh-rCN"    -> "zh-rCN" (Chinese Simplified)
+      - "values-b+sr+Latn" -> "b+sr+Latn" (Serbian in Latin script)
+    
+    The function tries to match the standard pattern first (values-XX),
+    and falls back to a simpler replacement if the pattern doesn't match.
+    
+    Args:
+        file_path: Path object pointing to a resource file
+        
+    Returns:
+        String representing the language code, or "default" for the base language
     """
     values_dir = file_path.parent.name
+    
+    # Base language case
     if values_dir == "values":
         return "default"
+    
+    # Standard pattern: values-XX
     match = re.match(r"values-(.+)", values_dir)
-    if match:
-        language = match.group(1)
-        logger.debug(f"Detected language '{language}' from {values_dir}")
-        return language
-    language = values_dir.replace("values-", "")
-    logger.debug(f"Fallback language detection: {language}")
+    if not match:
+        raise ValueError(
+            f"Invalid Android resource folder name: '{values_dir}'. "
+            "Expected format 'values' or 'values-<lang>'."
+        )
+    
+    language = match.group(1)
+    logger.debug(f"Detected language '{language}' from {values_dir}")
     return language
 
 
-def parse_gitignore(root_dir: str) -> List[str]:
-    """
-    Parse .gitignore files in the given directory and return a list of patterns.
-    """
-    gitignore_path = os.path.join(root_dir, ".gitignore")
-    if not os.path.exists(gitignore_path):
-        return []
-    
-    patterns = []
-    try:
-        with open(gitignore_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                # Skip empty lines and comments
-                if not line or line.startswith("#"):
-                    continue
-                patterns.append(line)
-        logger.debug(f"Parsed {len(patterns)} patterns from {gitignore_path}")
-    except Exception as e:
-        logger.warning(f"Error parsing .gitignore at {gitignore_path}: {e}")
-        raise
-    
-    return patterns
-
-
-def is_ignored_by_gitignore(path: Path, gitignore_patterns: List[str]) -> bool:
-    """
-    Check if a path matches any pattern from .gitignore.
-    This is a simplified implementation that handles common cases.
-    For more complex gitignore pattern matching, a dedicated library would be needed.
-    """
-    if not gitignore_patterns:
-        return False
-        
-    # Convert path to string for matching and normalize separators
-    path_str = str(path).replace('\\', '/')
-    path_parts = path_str.split('/')
-    
-    for pattern in gitignore_patterns:
-        # Remove leading and trailing slashes
-        clean_pattern = pattern.strip('/')
-        
-        # Handle directory-specific patterns (ending with /)
-        if pattern.endswith('/'):
-            dir_pattern = clean_pattern
-            if any(part == dir_pattern for part in path_parts):
-                return True
-        
-        # Handle glob patterns with /**
-        elif "/**" in pattern:
-            base_path = pattern.replace("/**", "")
-            if path_str.startswith(base_path):
-                return True
-                
-        # Handle wildcard patterns
-        elif '*' in pattern:
-            # Convert glob pattern to regex
-            regex_pattern = pattern.replace('.', '\\.')\
-                                 .replace('*', '.*')\
-                                 .replace('/', '\\/')
-            if re.search(f"^{regex_pattern}$", path_str) or \
-               re.search(f"/{regex_pattern}$", path_str) or \
-               re.search(f"^{regex_pattern}/", path_str) or \
-               re.search(f"/{regex_pattern}/", path_str):
-                return True
-                
-            # Special case for *.ext patterns
-            if pattern.startswith('*.'):
-                ext = pattern[1:]  # Get the extension including the dot
-                if path_str.endswith(ext):
-                    return True
-        
-        # Simple substring match for non-wildcard patterns
-        elif clean_pattern in path_str:
-            # Avoid matching substrings of path parts
-            if ('/' + clean_pattern) in path_str or \
-               (clean_pattern + '/') in path_str or \
-               path_str == clean_pattern:
-                return True
-    
-    return False
 
 def find_resource_files(resources_path: str, ignore_folders: List[str] = None) -> Dict[str, AndroidModule]:
     """
-    Recursively search for strings.xml files in "values*" directories.
-    Files whose paths contain any folder listed in ignore_folders are skipped.
-    This implementation assumes the fixed structure:
+    Recursively search for and organize Android string resource files by module.
+    
+    This function scans the given directory tree for strings.xml files located in 
+    "values" or "values-XX" directories, where XX represents language codes. It 
+    organizes these files into module structures based on the project hierarchy.
+    
+    Files can be excluded from processing using either:
+    1. An explicit list of folders to ignore (via ignore_folders parameter)
+    2. Patterns from .gitignore files (if ignore_folders is not provided)
+    
+    The function assumes a standard Android project structure:
       <module_name>/src/main/res/values(-locale)/strings.xml
-    and uses the directory five levels up from the strings.xml file as the module directory.
+    and uses the directory five levels up from each strings.xml file as the module 
+    root directory.
+    
+    Args:
+        resources_path: Path to the root directory to scan for resources
+        ignore_folders: Optional list of folder names to ignore during scanning
+        
+    Returns:
+        Dictionary mapping module identifiers to AndroidModule objects containing
+        the resource files organized by language
+        
+    Raises:
+        Exception: If there's an error determining the module structure
     """
     resources_dir = Path(resources_path)
     modules: Dict[str, AndroidModule] = {}
     logger.info(f"Scanning for resource files in {resources_dir}")
 
-    # Use explicit ignore folders if provided; otherwise try .gitignore patterns.
-    gitignore_patterns = [] if ignore_folders else parse_gitignore(resources_path)
+    # Determine which files to ignore:
+    # 1. Use explicit ignore_folders if provided
+    # 2. Otherwise, use patterns from .gitignore files with proper precedence
     if ignore_folders:
         logger.info(f"Using explicit ignore folders: {', '.join(ignore_folders)}")
-    elif gitignore_patterns:
-        logger.info(f"Using {len(gitignore_patterns)} patterns from .gitignore in {resources_dir}")
+        gitignore_patterns = []
+        all_gitignores = {}
+    else:
+        # Find all .gitignore files in the directory hierarchy
+        all_gitignores = find_all_gitignores(resources_path)
+        if all_gitignores:
+            total_patterns = sum(len(patterns) for patterns in all_gitignores.values())
+            logger.info(f"Using {total_patterns} patterns from .gitignore files in directory hierarchy")
+        else:
+            # Fallback to just the root .gitignore if no ignore_folders specified
+            gitignore_patterns = parse_gitignore(resources_path)
+            if gitignore_patterns:
+                logger.info(f"Using {len(gitignore_patterns)} patterns from .gitignore in {resources_dir}")
+            else:
+                gitignore_patterns = []
 
+    # Recursively find all strings.xml files
     for xml_file_path in resources_dir.rglob("strings.xml"):
-        # Skip file if it is in an ignored folder.
+        # Skip files in ignored directories
         if ignore_folders and any(ignored in str(xml_file_path.parts) for ignored in ignore_folders):
             logger.debug(f"Skipping {xml_file_path} (matched ignore_folders)")
             continue
-        elif gitignore_patterns and is_ignored_by_gitignore(xml_file_path, gitignore_patterns):
-            logger.debug(f"Skipping {xml_file_path} (matched gitignore pattern)")
-            continue
+        elif all_gitignores:
+            # Use the full hierarchical gitignore implementation
+            if is_ignored_by_gitignores(xml_file_path, all_gitignores):
+                logger.debug(f"Skipping {xml_file_path} (matched gitignore pattern from hierarchy)")
+                continue
+        elif not ignore_folders and gitignore_patterns:
+            # Use the single file gitignore implementation
+            if is_ignored_by_gitignore(xml_file_path, gitignore_patterns):
+                logger.debug(f"Skipping {xml_file_path} (matched gitignore pattern)")
+                continue
 
-        # Process only if the immediate parent folder starts with "values"
+        # Process only files in "values" or "values-XX" directories
         if not xml_file_path.parent.name.startswith("values"):
             continue
 
+        # Detect which language this resource file is for
         language = detect_language_from_path(xml_file_path)
         
         try:
+            # Identify the module based on the project structure
             # With a fixed structure, the module folder is 5 levels up from strings.xml.
+            # Example: app/src/main/res/values/strings.xml → module is "app"
             module_path = xml_file_path.parents[4]
         except Exception as e:
             logger.error(f"Error determining module folder for {xml_file_path}: {e}")
             raise
 
+        # Use both the module name and its full path as an identifier
+        # This ensures we don't merge modules with the same name from different paths
         module_name = module_path.name
         module_key = str(module_path.resolve())
+        
+        # Create the module entry if it doesn't exist yet
         if module_key not in modules:
             modules[module_key] = AndroidModule(module_name, identifier=module_key)
             logger.debug(f"Created module entry for '{module_name}' (key: {module_key})")
+            
+        # Parse and add the resource file to the appropriate module and language
         resource_file = AndroidResourceFile(xml_file_path, language)
         modules[module_key].add_resource(language, resource_file)
     
@@ -330,15 +330,35 @@ def find_resource_files(resources_path: str, ignore_folders: List[str] = None) -
 
 def update_xml_file(resource: AndroidResourceFile) -> None:
     """
-    Update the XML file represented by an AndroidResourceFile by appending missing elements,
-    while preserving the original formatting as much as possible.
+    Update Android string resources XML file while preserving formatting.
+    
+    This function writes the modified string and plural resources back to the XML file,
+    carefully maintaining the original formatting, indentation, and XML structure. 
+    It either updates existing elements or appends new ones as needed.
+    
+    The function performs the following operations:
+    1. Reads the existing XML file and parses its structure
+    2. Preserves the original indentation style
+    3. Updates or adds <string> elements
+    4. Updates or adds <plurals> elements and their nested <item> elements
+    5. Ensures proper XML formatting with consistent indentation
+    6. Writes the modified XML back to the file with the correct encoding
+    
+    Args:
+        resource: AndroidResourceFile object containing the updated resources
+        
+    Returns:
+        None
+        
+    Raises:
+        Exception: If there's an error reading, parsing, or writing the XML file
     """
-
     # Only update if the resource was modified
     if not resource.modified:
         return
 
     try:
+        # Parse the XML with a parser that preserves whitespace
         parser = etree.XMLParser(remove_blank_text=False)
         tree = etree.parse(str(resource.path), parser)
         root = tree.getroot()
@@ -346,78 +366,101 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
         logger.error(f"Error reading XML file {resource.path}: {e}")
         raise
 
-    # Determine sample indentation from an existing child of <resources>; default to 4 spaces.
+    # Detect the indentation style from the existing file (default to 4 spaces)
     sample_indent = "    "
     if len(root) > 0:
         m = re.match(r'\n(\s+)', root[0].tail or "")
         if m:
             sample_indent = m.group(1)
 
-    # Ensure the whitespace before the first child is properly indented.
+    # Ensure proper indentation before the first child
     if not root.text or not root.text.strip():
         root.text = "\n" + sample_indent
 
-    # --- Update <string> elements (direct children of <resources>) ---
-    # Record the original number of children before appending new nodes.
-    original_root_count = len(root)
-    existing_string_names = {elem.get("name") for elem in root if elem.tag == "string"}
+    # --- Handle <string> elements ---
     
-    # If there are existing children, ensure the last one ends with a newline and the proper indent.
+    # Map existing string elements by name for quick lookup
+    original_root_count = len(root)
+    existing_string_elements = {elem.get("name"): elem for elem in root if elem.tag == "string"}
+    
+    # Ensure consistent formatting between elements
     if original_root_count > 0:
         last_original = root[original_root_count - 1]
         if not last_original.tail or not last_original.tail.endswith(sample_indent):
             last_original.tail = "\n" + sample_indent
 
-    # Append new <string> elements.
+    # Process each string resource
     for key, translation in resource.strings.items():
-        if key not in existing_string_names:
+        if key in existing_string_elements:
+            # Update existing string if the text has changed
+            if existing_string_elements[key].text != translation:
+                existing_string_elements[key].text = translation
+                logger.debug(f"Updated <string name='{key}'> element in {resource.path}")
+        else:
+            # Create and append a new string element
             new_elem = etree.Element("string", name=key)
             new_elem.text = translation
-            # Set the tail to newline + indent.
             new_elem.tail = "\n" + sample_indent
             root.append(new_elem)
             logger.debug(f"Appended <string name='{key}'> element to {resource.path}")
 
-    # --- Update <plurals> elements ---
+    # --- Handle <plurals> elements ---
+    
+    # Map existing plurals elements by name
     existing_plural_elements = {elem.get("name"): elem for elem in root if elem.tag == "plurals"}
+    
+    # Process each plural resource
     for plural_name, items in resource.plurals.items():
+        # Get or create the plural element
         if plural_name in existing_plural_elements:
             plural_elem = existing_plural_elements[plural_name]
         else:
+            # Create a new plurals element with proper nesting
             plural_elem = etree.Element("plurals", name=plural_name)
-            # Set the text so that inner <item> elements get an extra indent level.
             plural_elem.text = "\n" + sample_indent + "    "
-            root.append(plural_elem)
-            # Set a tail for the new <plurals> element
             plural_elem.tail = "\n" + sample_indent
+            root.append(plural_elem)
 
-        # Use one extra indent level for <item> elements.
+        # Calculate the indentation for the nested item elements
         item_indent = sample_indent + "    "
-        existing_quantities = {child.get("quantity") for child in plural_elem if child.tag == "item"}
+        
+        # Map existing item elements by quantity
+        existing_quantity_items = {child.get("quantity"): child 
+                                 for child in plural_elem 
+                                 if child.tag == "item"}
+        
+        # Process each quantity variation
         for qty, translation in items.items():
-            if qty not in existing_quantities:
+            if qty in existing_quantity_items:
+                # Update existing item if text has changed
+                if existing_quantity_items[qty].text != translation:
+                    existing_quantity_items[qty].text = translation
+                    logger.debug(f"Updated plural '{plural_name}' quantity '{qty}' in {resource.path}")
+            else:
+                # Create and append a new item element
                 new_item = etree.Element("item", quantity=qty)
                 new_item.text = translation
                 new_item.tail = "\n" + item_indent
                 plural_elem.append(new_item)
+                logger.debug(f"Added plural '{plural_name}' quantity '{qty}' to {resource.path}")
+                
+        # Ensure proper formatting for the last item in a plurals element
         if len(plural_elem) > 0:
             plural_elem[-1].tail = "\n" + sample_indent
 
-    # Finally, ensure the last element in <resources> has a tail with just a newline (for the closing tag).
+    # Ensure the closing tag of the root element is properly formatted
     if len(root) > 0:
         root[-1].tail = "\n"
 
     try:
-        # Serialize the tree to a byte string.
+        # Serialize and write the XML back to the file
         xml_bytes = etree.tostring(tree, encoding="utf-8", xml_declaration=True, pretty_print=True)
-        # Remove any trailing newline characters.
-        xml_bytes = xml_bytes.rstrip(b"\n")
+        xml_bytes = xml_bytes.rstrip(b"\n")  # Remove trailing newlines
         
-        # Write the cleaned-up XML back to file.
         with open(resource.path, "wb") as f:
             f.write(xml_bytes)
         
-        # Post-process the XML declaration if needed.
+        # Standardize the XML declaration format
         with open(resource.path, "r+", encoding="utf-8") as f:
             content = f.read()
             content = re.sub(
@@ -429,6 +472,7 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
             f.seek(0)
             f.write(content)
             f.truncate()
+            
         logger.info(f"Updated XML file: {resource.path}")
         resource.modified = False
     except Exception as e:
@@ -438,20 +482,48 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
 
 def indent_xml(elem: ElementTree.Element, level: int = 0) -> None:
     """
-    Recursively indent an XML element for pretty-printing.
+    Recursively indent an XML element tree for pretty-printing.
+    
+    This utility function adds appropriate indentation to an XML element tree,
+    making the XML output more readable by humans. It works by modifying the 
+    text and tail attributes of each element to include newlines and spaces.
+    
+    The function handles both container elements (with children) and leaf elements 
+    (without children) differently to ensure proper formatting:
+    - Container elements get their children indented one level deeper
+    - The last child in a container receives special formatting for its tail
+    - Leaf elements get proper indentation for their tail content
+    
+    Args:
+        elem: The XML element to indent
+        level: The current indentation level (0 for root element)
+        
+    Returns:
+        None - the element tree is modified in place
     """
-    pad = "    "  # 4 spaces per level
+    pad = "    "  # Standard 4 spaces per indentation level
 
+    # Elements with children need special handling
     if len(elem):
+        # Indent the text immediately inside the opening tag if it's just whitespace
         if not elem.text or not elem.text.strip():
             elem.text = "\n" + (level + 1) * pad
+        
+        # Process all children except the last one
         for child in elem[:-1]:
+            # Recursively indent the child
             indent_xml(child, level + 1)
+            # Add appropriate indentation after the child's closing tag
             if not child.tail or not child.tail.strip():
                 child.tail = "\n" + (level + 1) * pad
+        
+        # Handle the last child specially
         indent_xml(elem[-1], level + 1)
+        # Indent after the last child's closing tag (one level less)
         if not elem[-1].tail or not elem[-1].tail.strip():
             elem[-1].tail = "\n" + level * pad
+    
+    # For elements without children, just handle the tail if we're not at the root
     else:
         if level and (not elem.tail or not elem.tail.strip()):
             elem.tail = "\n" + level * pad
@@ -463,47 +535,112 @@ def indent_xml(elem: ElementTree.Element, level: int = 0) -> None:
 
 def call_openai(prompt: str, system_message: str, api_key: str, model: str) -> str:
     """
-    Call the OpenAI API with the given prompt and system message.
+    Call the OpenAI API to generate translated text using the chat completions endpoint.
+    
+    This function handles the communication with OpenAI's API to generate translations.
+    It sets up a chat completion request with system and user messages to provide
+    appropriate context and instructions for translation.
+    
+    The function uses a temperature of 0 to ensure consistent, deterministic translations.
+    This is important for maintaining coherence across different runs and avoiding
+    creative variations that could be inappropriate for UI strings.
+    
+    Args:
+        prompt: The user prompt containing the text to translate and guidelines
+        system_message: The system message defining the translator's role and context
+        api_key: OpenAI API key for authentication
+        model: The specific OpenAI model to use (e.g., "gpt-4o-mini", "gpt-4")
+        
+    Returns:
+        The translated text extracted from the API response
+        
+    Raises:
+        ImportError: If the OpenAI Python package is not installed
+        Exception: For any API-related errors (authentication, rate limits, etc.)
     """
+    # Check if the OpenAI package is installed
     try:
         from openai import OpenAI
+    except ImportError:
+        logger.error("OpenAI package not installed. Please install it using 'pip install openai'.")
+        raise ImportError("OpenAI package not installed. Run 'pip install openai' first.")
+    
+    try:
+        # Initialize the OpenAI client with the provided API key
         client = OpenAI(api_key=api_key)
+        
+        # Log the request details at debug level
         logger.debug(
-            f"Sending request to OpenAI with system prompt: {system_message} and user prompt:\n{prompt}"
+            f"Sending request to OpenAI (model: {model}) with system prompt: {system_message} "
+            f"and user prompt:\n{prompt}"
         )
+        
+        # Make the API call using the chat completions endpoint
         response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0,
+            temperature=0,  # Use deterministic output for consistent translations
         )
+        
+        # Extract and clean up the generated text
         translation = response.choices[0].message.content.strip()
+        
+        # Log the response at debug level
         logger.debug(f"Received response from OpenAI: {translation}")
         logger.debug("\n-------\n")
 
         return translation
-    except ImportError:
-        logger.error("OpenAI package not installed. Please install it using 'pip install openai'.")
-        return "ERROR: OpenAI package not installed"
+        
     except Exception as e:
+        # Log any errors that occur during the API call
         logger.error(f"Error calling OpenAI API: {e}")
         raise
 
 
 def translate_text(text: str, target_language: str, api_key: str, model: str, project_context: str) -> str:
     """
-    Translate a simple string resource to target_language, following the prompt above.
+    Translate a single string resource to the target language using OpenAI.
+    
+    This function handles the translation of a simple text string (typically from an 
+    Android string resource) to the specified target language. It builds a prompt 
+    using the translation guidelines, sends it to the OpenAI API, and returns the 
+    translated result.
+    
+    The translation follows specific guidelines for mobile UI strings, maintaining
+    proper formatting, placeholders, and Android-specific requirements. If project 
+    context is provided, it's included to help provide more accurate translations.
+    
+    Args:
+        text: The source text to translate
+        target_language: The target language code (e.g., "es", "fr", "zh-rCN")
+        api_key: OpenAI API key for authentication
+        model: OpenAI model to use for translation
+        project_context: Optional additional context about the project
+        
+    Returns:
+        The translated text in the target language
+        
+    Note:
+        Empty strings are returned as-is without calling the API
     """
+    # Don't process empty strings
     if text.strip() == "":
         return ""
+        
+    # Build the prompt with translation guidelines and the source text
     prompt = (TRANSLATION_GUIDELINES +
               TRANSLATE_FINAL_TEXT.format(target_language=target_language) +
               text)
+              
+    # Configure the system message for the API call
     system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=target_language)
     if project_context:
         system_message += f"\nProject context: {project_context}"
+        
+    # Call OpenAI API to get the translation
     translated = call_openai(prompt, system_message, api_key, model)
 
     return translated
@@ -511,21 +648,61 @@ def translate_text(text: str, target_language: str, api_key: str, model: str, pr
 
 def translate_plural_text(source_plural: Dict[str, str], target_language: str, api_key: str, model: str, project_context: str) -> Dict[str, str]:
     """
-    Translates a plural resource from English to target_language, following Android guidelines.
+    Translate Android plural resources to the target language using OpenAI.
+    
+    This function handles the translation of plural string resources, which require
+    special handling because different languages have different plural forms. For
+    example, English typically has two forms (singular/plural), while Slavic languages 
+    may have multiple forms for different quantities.
+    
+    The function:
+    1. Converts the source plural dictionary to JSON format
+    2. Creates a prompt with special guidelines for plurals
+    3. Calls the OpenAI API to get translations for all plural forms
+    4. Parses the JSON response back into a dictionary
+    
+    Args:
+        source_plural: Dictionary mapping plural quantity keys to strings
+                      (e.g., {"one": "%d day", "other": "%d days"})
+        target_language: The target language code (e.g., "es", "fr", "zh-rCN")
+        api_key: OpenAI API key for authentication
+        model: OpenAI model to use for translation
+        project_context: Optional additional context about the project
+        
+    Returns:
+        Dictionary mapping plural quantity keys to translated strings
+        
+    Raises:
+        Exception: If there's an error parsing the JSON response
     """
+    # Convert source plural forms to JSON format
     source_json = json.dumps(source_plural, indent=2)
+    
+    # Build the prompt with both standard and plural-specific guidelines
     prompt = (TRANSLATION_GUIDELINES +
               PLURAL_GUIDELINES_ADDITION +
               TRANSLATE_FINAL_TEXT.format(target_language=target_language) +
               source_json)
+              
+    # Configure the system message for the API call
     system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=target_language)
-
     if project_context:
         system_message += f"\nProject context: {project_context}"
+    
+    # Call OpenAI API to get the translation
     translation_output = call_openai(prompt, system_message, api_key, model)
+    
+    # Parse the response as JSON
     try:
         plural_dict = json.loads(translation_output)
-        return plural_dict if isinstance(plural_dict, dict) else {"other": translation_output}
+        
+        # Validate the response is a dictionary
+        if isinstance(plural_dict, dict):
+            return plural_dict
+        else:
+            # Fallback if not a proper dictionary
+            logger.warning(f"Unexpected plural translation format: {translation_output}")
+            return {"other": translation_output}
     except Exception as e:
         logger.error(f"Error parsing plural translation JSON: {e}. Falling back to single form.")
         raise
@@ -536,23 +713,220 @@ def translate_plural_text(source_plural: Dict[str, str], target_language: str, a
 
 def validate_translation(source_text: str, current_translation: str, target_language: str, is_plural: bool = False) -> str:
     """
-    Prompts the user to validate the translation. Displays the source text and the current translation,
-    then asks if the translation is acceptable. If not, the user can input a corrected version.
+    Prompt the user to validate and optionally correct a translation.
+    
+    This function provides an interactive way for users to review translations
+    before they are applied. It displays the source text and its translation,
+    then asks the user if they accept it or want to provide a correction.
+    
+    The function is particularly useful for:
+    - Reviewing automatically generated translations
+    - Correcting any mistakes or awkward phrasing
+    
+    Args:
+        source_text: The original text in the source language
+        current_translation: The translated text to validate
+        target_language: The language code of the translation
+        is_plural: Whether this is a plural resource (for display purposes)
+        
+    Returns:
+        The validated translation (either the original or a corrected version)
     """
     print("\n----- Validate Translation -----")
+    
+    # Display appropriate resource type label
     resource_type = "Plural Resource" if is_plural else "String Resource"
+    
+    # Show the source and translated text to the user
     print(f"Source {resource_type}: {source_text}")
     print(f"Current Translation in {target_language}: {current_translation}")
+    
+    # Ask the user if they accept the translation
     response = input("Do you accept this translation? (y/n): ").strip().lower()
+    
     if response == "y":
+        # User accepts the translation as-is
         return current_translation
     else:
+        # User wants to provide a correction
         new_trans = input("Enter the corrected translation: ").strip()
         return new_trans
 
 # ------------------------------------------------------------------------------
 # Auto-Translation Process
 # ------------------------------------------------------------------------------
+
+def _translate_missing_strings(
+    res: AndroidResourceFile,
+    missing_strings: set,
+    module_default_strings: Dict[str, str],
+    lang: str,
+    openai_api_key: str,
+    openai_model: str,
+    project_context: str,
+    validate_translations: bool
+) -> List[Dict]:
+    """
+    Helper function to translate missing strings for a resource file.
+    Returns a list of translation results.
+    """
+    results = []
+    for key in sorted(missing_strings):
+        source_text = module_default_strings[key]
+        # Skip empty strings
+        if source_text.strip() == "":
+            res.strings[key] = ""
+            continue
+            
+        try:
+            # Translate the string
+            translated = translate_text(
+                source_text, 
+                target_language=lang,
+                api_key=openai_api_key, 
+                model=openai_model,
+                project_context=project_context
+            )
+            
+            logger.info(f"Translated string '{key}' to {lang}: '{source_text}' -> '{translated}'")
+
+            # Validate if required
+            if validate_translations:
+                translated = validate_translation(source_text, translated, target_language=lang)
+                
+            # Update the resource
+            res.strings[key] = translated
+            res.modified = True
+            
+            # Add to results
+            results.append({
+                "key": key,
+                "source": source_text,
+                "translation": translated,
+            })
+        except Exception as e:
+            logger.error(f"Error translating string '{key}': {e}")
+            raise
+            
+    return results
+
+
+def _translate_missing_plurals(
+    res: AndroidResourceFile,
+    missing_plurals: Dict[str, Dict[str, str]],
+    lang: str,
+    openai_api_key: str,
+    openai_model: str,
+    project_context: str,
+    validate_translations: bool
+) -> List[Dict]:
+    """
+    Helper function to translate missing plurals for a resource file.
+    Returns a list of translation results.
+    """
+    results = []
+    for plural_name, default_map in missing_plurals.items():
+        current_map = res.plurals.get(plural_name, {})
+        try:
+            # Generate plural translations
+            generated_plural = translate_plural_text(
+                default_map, 
+                target_language=lang,
+                api_key=openai_api_key, 
+                model=openai_model,
+                project_context=project_context
+            )
+            
+            # Merge with existing translations
+            merged = generated_plural.copy()
+            merged.update(current_map)
+            res.plurals[plural_name] = merged
+            res.modified = True
+            
+            logger.info(f"Translated plural group '{plural_name}' for language '{lang}': {res.plurals[plural_name]}")
+            
+            # Validate if required
+            if validate_translations:
+                for plural_key in generated_plural:
+                    if plural_key in current_map:
+                        continue
+                    src_text = default_map.get(plural_key, default_map.get("other", ""))
+                    validated = validate_translation(
+                        src_text, 
+                        res.plurals[plural_name][plural_key],
+                        target_language=lang, 
+                        is_plural=True
+                    )
+                    res.plurals[plural_name][plural_key] = validated
+                    
+            # Add to results
+            results.append({
+                "plural_name": plural_name,
+                "translations": res.plurals[plural_name],
+            })
+        except Exception as e:
+            logger.error(f"Error translating plural '{plural_name}': {e}")
+            raise
+            
+    return results
+
+
+def _collect_default_resources(module: AndroidModule) -> Tuple[Dict[str, str], Dict[str, Dict[str, str]]]:
+    """
+    Collect all default string and plural resources from a module.
+    """
+    module_default_strings: Dict[str, str] = {}
+    module_default_plurals: Dict[str, Dict[str, str]] = defaultdict(dict)
+    
+    for res in module.language_resources.get("default", []):
+        # Collect strings
+        for key, val in res.strings.items():
+            module_default_strings.setdefault(key, val)
+        
+        # Collect plurals
+        for plural_name, quantities in res.plurals.items():
+            for qty, text in quantities.items():
+                module_default_plurals[plural_name].setdefault(qty, text)
+                
+    return module_default_strings, module_default_plurals
+
+
+def _generate_translation_summary(translation_log: dict, total_translated: int) -> None:
+    """
+    Generate and log a summary of translations performed.
+    """
+    if total_translated <= 0:
+        logger.info("No translations needed")
+        return
+        
+    translated_info = {}
+    for module_name, lang_details in translation_log.items():
+        for lang, details in lang_details.items():
+            entry = translated_info.setdefault(lang, {'strings': set(), 'plurals': set()})
+            
+            # Collect string keys
+            for s in details.get("strings", []):
+                entry['strings'].add(s["key"])
+                
+            # Collect plural names
+            for p in details.get("plurals", []):
+                entry['plurals'].add(p["plural_name"])
+                
+    # Log summary for each language
+    for lang, items in translated_info.items():
+        if not items['strings'] and not items['plurals']:
+            continue
+            
+        msg_parts = [f"Language '{lang}':"]
+        
+        if items['strings']:
+            msg_parts.append(f"Strings translated: {', '.join(sorted(items['strings']))}")
+            
+        if items['plurals']:
+            msg_parts.append(f"Plurals translated: {', '.join(sorted(items['plurals']))}")
+            
+        logger.info(" ".join(msg_parts))
+
 
 def auto_translate_resources(modules: Dict[str, AndroidModule],
                              openai_api_key: str,
@@ -565,119 +939,64 @@ def auto_translate_resources(modules: Dict[str, AndroidModule],
     """
     translation_log = {}
     total_translated = 0
-    languages_covered = set()
 
     for module in modules.values():
         if "default" not in module.language_resources:
             logger.warning(f"Module '{module.name}' missing default resources; skipping auto translation.")
             continue
 
-        module_default_strings: Dict[str, str] = {}
-        module_default_plurals: Dict[str, Dict[str, str]] = defaultdict(dict)
-        for res in module.language_resources["default"]:
-            for key, val in res.strings.items():
-                module_default_strings.setdefault(key, val)
-            for plural_name, quantities in res.plurals.items():
-                for qty, text in quantities.items():
-                    module_default_plurals[plural_name].setdefault(qty, text)
+        # Collect default resources
+        module_default_strings, module_default_plurals = _collect_default_resources(module)
 
+        # Process each non-default language
         for lang, resources in module.language_resources.items():
             if lang == "default":
                 continue
+                
+            # Initialize translation log for this language
             translation_log.setdefault(module.name, {})[lang] = {"strings": [], "plurals": []}
+            
             for res in resources:
+                # Find missing translations
                 missing_strings = set(module_default_strings.keys()) - set(res.strings.keys())
+                
+                # Find missing plurals
                 missing_plurals = {}
                 for plural_name, default_map in module_default_plurals.items():
                     current_map = res.plurals.get(plural_name, {})
                     if not current_map or set(current_map.keys()) != set(default_map.keys()):
                         missing_plurals[plural_name] = default_map
-                # Log only if there are missing translations
+                        
+                # Skip if nothing to translate
                 if not missing_strings and not missing_plurals:
                     continue
                 
-                # Track languages receiving translations
-                languages_covered.add(lang)
-                
                 logger.info(f"Auto-translating missing resources for module '{module.name}', language '{lang}'")
-                for key in sorted(missing_strings):
-                    source_text = module_default_strings[key]
-                    if source_text.strip() == "":
-                        res.strings[key] = ""
-                        continue
-                    try:
-                        translated = translate_text(source_text, target_language=lang,
-                                                    api_key=openai_api_key, model=openai_model,
-                                                    project_context=project_context)
-                        
-                        logger.info(f"Translated string '{key}' to {lang}: '{source_text}' -> '{translated}'")
-
-                        if validate_translations:
-                            translated = validate_translation(source_text, translated, target_language=lang)
-                        res.strings[key] = translated
-                        res.modified = True
-                        total_translated += 1
-                        translation_log[module.name][lang]["strings"].append({
-                            "key": key,
-                            "source": source_text,
-                            "translation": translated,
-                        })
-                    except Exception as e:
-                        logger.error(f"Error translating string '{key}': {e}")
-                        raise
-
-                for plural_name, default_map in module_default_plurals.items():
-                    current_map = res.plurals.get(plural_name, {})
-                    if not current_map or set(current_map.keys()) != set(default_map.keys()):
-                        try:
-                            generated_plural = translate_plural_text(default_map, target_language=lang,
-                                                                       api_key=openai_api_key, model=openai_model,
-                                                                       project_context=project_context)
-                            merged = generated_plural.copy()
-                            merged.update(current_map)
-                            res.plurals[plural_name] = merged
-                            res.modified = True
-                            total_translated += len(generated_plural)
-                            logger.info(f"Translated plural group '{plural_name}' for language '{lang}': {res.plurals[plural_name]}")
-                            if validate_translations:
-                                for plural_key in generated_plural:
-                                    if plural_key in current_map:
-                                        continue
-                                    src_text = default_map.get(plural_key, default_map.get("other", ""))
-                                    validated = validate_translation(src_text, res.plurals[plural_name][plural_key],
-                                                                       target_language=lang, is_plural=True)
-                                    res.plurals[plural_name][plural_key] = validated
-                            translation_log[module.name][lang]["plurals"].append({
-                                "plural_name": plural_name,
-                                "translations": res.plurals[plural_name],
-                            })
-                        except Exception as e:
-                            logger.error(f"Error translating plural '{plural_name}': {e}")
-                            raise
+                
+                # Translate missing strings
+                if missing_strings:
+                    string_results = _translate_missing_strings(
+                        res, missing_strings, module_default_strings, lang,
+                        openai_api_key, openai_model, project_context, validate_translations
+                    )
+                    translation_log[module.name][lang]["strings"].extend(string_results)
+                    total_translated += len(string_results)
+                
+                # Translate missing plurals
+                if missing_plurals:
+                    plural_results = _translate_missing_plurals(
+                        res, missing_plurals, lang,
+                        openai_api_key, openai_model, project_context, validate_translations
+                    )
+                    translation_log[module.name][lang]["plurals"].extend(plural_results)
+                    total_translated += sum(len(p["translations"]) for p in plural_results)
+                
+                # Update the XML file if needed
                 if res.modified:
                     update_xml_file(res)
     
-    # After processing all modules, add detailed log for translated resource names.
-    if total_translated > 0:
-        translated_info = {}
-        for lang_details in translation_log.items():
-            for lang, details in lang_details.items():
-                entry = translated_info.setdefault(lang, {'strings': set(), 'plurals': set()})
-                for s in details.get("strings", []):
-                    entry['strings'].add(s["key"])
-                for p in details.get("plurals", []):
-                    entry['plurals'].add(p["plural_name"])
-        for lang, items in translated_info.items():
-            if not items['strings'] and not items['plurals']:
-                continue
-            msg = f"Language '{lang}':"
-            if items['strings']:
-                msg += f" Strings translated: {', '.join(sorted(items['strings']))}"
-            if items['plurals']:
-                msg += f"; Plurals translated: {', '.join(sorted(items['plurals']))}"
-            logger.info(msg)
-    else:
-        logger.info("No translations needed")
+    # Generate summary
+    _generate_translation_summary(translation_log, total_translated)
         
     return translation_log
 
@@ -685,11 +1004,90 @@ def auto_translate_resources(modules: Dict[str, AndroidModule],
 # Missing Translation Report
 # ------------------------------------------------------------------------------
 
+def _collect_default_translations(module: AndroidModule) -> Tuple[Set[str], Dict[str, Set[str]]]:
+    """
+    Collect all default string keys and plural quantities from a module.
+    
+    Args:
+        module: The Android module to collect default translations from
+        
+    Returns:
+        A tuple containing (set of string keys, dict of plural name -> quantities)
+    """
+    default_strings: Set[str] = set()
+    default_plural_quantities: Dict[str, Set[str]] = {}
+    
+    if "default" not in module.language_resources:
+        return default_strings, default_plural_quantities
+    
+    for resource in module.language_resources["default"]:
+        default_strings.update(resource.strings.keys())
+        for plural_name, quantities in resource.plurals.items():
+            default_plural_quantities.setdefault(plural_name, set()).update(quantities.keys())
+            
+    return default_strings, default_plural_quantities
+
+
+def _collect_language_translations(resources: List[AndroidResourceFile]) -> Tuple[Set[str], Dict[str, Set[str]]]:
+    """
+    Collect all string keys and plural quantities from a list of resources.
+    
+    Args:
+        resources: List of AndroidResourceFile objects
+        
+    Returns:
+        A tuple containing (set of string keys, dict of plural name -> quantities)
+    """
+    lang_strings: Set[str] = set()
+    lang_plural_quantities: Dict[str, Set[str]] = {}
+    
+    for resource in resources:
+        lang_strings.update(resource.strings.keys())
+        for plural_name, quantities in resource.plurals.items():
+            lang_plural_quantities.setdefault(plural_name, set()).update(quantities.keys())
+            
+    return lang_strings, lang_plural_quantities
+
+
+def _format_missing_translations(
+    missing_strings: Set[str], 
+    missing_plurals: Dict[str, Set[str]]
+) -> str:
+    """
+    Format missing translations for logging.
+    
+    Args:
+        missing_strings: Set of missing string keys
+        missing_plurals: Dict of missing plural names and quantities
+        
+    Returns:
+        Formatted string describing what's missing
+    """
+    parts = []
+    
+    if missing_strings:
+        parts.append(f"strings: {', '.join(sorted(missing_strings))}")
+        
+    if missing_plurals:
+        plurals_part = ", ".join([
+            f"{k}({', '.join(sorted(v))})" 
+            for k, v in missing_plurals.items()
+        ])
+        parts.append(f"plurals: {plurals_part}")
+        
+    return " | ".join(parts)
+
+
 def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
     """
     For each module, compare non-default language resources against the union of keys
     in the default language. Checks for missing <string> keys and missing plural quantities.
-    Returns a dictionary of missing translations for potential reporting.
+    
+    Args:
+        modules: Dictionary of module identifiers to AndroidModule objects
+        
+    Returns:
+        A dictionary of missing translations for potential reporting
     """
     logger.info("Missing Translations Report")
     missing_count = 0
@@ -698,30 +1096,23 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
     for module in modules.values():
         module_has_missing = False
         module_log_lines = []
-        default_strings: Set[str] = set()
-        default_plural_quantities: Dict[str, Set[str]] = {}
         
         if "default" not in module.language_resources:
             logger.warning(f"  No default resources for module '{module.name}'")
             continue
 
-        for resource in module.language_resources["default"]:
-            default_strings.update(resource.strings.keys())
-            for plural_name, quantities in resource.plurals.items():
-                default_plural_quantities.setdefault(plural_name, set()).update(quantities.keys())
+        # Collect defaults
+        default_strings, default_plural_quantities = _collect_default_translations(module)
 
+        # Check each non-default language
         for lang, resources in sorted(module.language_resources.items()):
             if lang == "default":
                 continue
                 
-            lang_strings: Set[str] = set()
-            lang_plural_quantities: Dict[str, Set[str]] = {}
-            
-            for resource in resources:
-                lang_strings.update(resource.strings.keys())
-                for plural_name, quantities in resource.plurals.items():
-                    lang_plural_quantities.setdefault(plural_name, set()).update(quantities.keys())
+            # Collect this language's translations
+            lang_strings, lang_plural_quantities = _collect_language_translations(resources)
                     
+            # Find what's missing
             missing_strings = default_strings - lang_strings
             missing_plurals: Dict[str, Set[str]] = {}
             
@@ -731,14 +1122,14 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
                 if diff:
                     missing_plurals[plural_name] = diff
                     
+            # Log and report if anything is missing
             if missing_strings or missing_plurals:
                 missing_count += 1
                 module_has_missing = True
-                missing_str = f"strings: {', '.join(sorted(missing_strings))}" if missing_strings else ""
-                missing_plu = (" | plurals: " + ", ".join([f"{k}({', '.join(sorted(v))})" 
-                                                            for k, v in missing_plurals.items()])
-                               if missing_plurals else "")
-                module_log_lines.append(f"  [{lang}]: missing {missing_str}{missing_plu}")
+                
+                # Format for logging
+                missing_description = _format_missing_translations(missing_strings, missing_plurals)
+                module_log_lines.append(f"  [{lang}]: missing {missing_description}")
                 
                 # Add to the report dictionary
                 if module.name not in missing_report:
@@ -748,11 +1139,13 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
                     "plurals": {name: list(quantities) for name, quantities in missing_plurals.items()}
                 }
         
+        # Log for this module
         if module_has_missing:
             logger.info(f"Module: {module.name} (has missing translations)")
             for line in module_log_lines:
                 logger.info(line)
     
+    # Summary log
     if missing_count == 0:
         logger.info("All translations are complete.")
         

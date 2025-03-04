@@ -325,8 +325,6 @@ def find_resource_files(resources_path: str, ignore_folders: List[str] = None) -
         resource_file = AndroidResourceFile(xml_file_path, language)
         modules[module_key].add_resource(language, resource_file)
     
-        modules[module_key].add_resource(language, resource_file)
-    
     return modules
 
 
@@ -1214,11 +1212,6 @@ def create_translation_report(translation_log):
 # ------------------------------------------------------------------------------
 
 def main() -> None:
-    """
-    Main entry point for the Android Resource Translator script.
-    Parses command-line arguments or environment variables, finds resource files,
-    checks for missing translations, and auto-translates them.
-    """
     """
     Main entry point for the Android Resource Translator script.
     Parses command-line arguments or environment variables, finds resource files,

@@ -533,6 +533,29 @@ def indent_xml(elem: ElementTree.Element, level: int = 0) -> None:
 # Translation & OpenAI API Integration
 # ------------------------------------------------------------------------------
 
+def escape_apostrophes(text: str) -> str:
+    """
+    Ensure apostrophes in the text are properly escaped for Android resource files.
+    
+    This function checks if apostrophes are already properly escaped with a backslash (\')
+    and adds the escape character if needed. This is critical for Android resource files
+    as unescaped apostrophes will cause XML parsing errors.
+    
+    Args:
+        text: The text to process
+        
+    Returns:
+        The text with properly escaped apostrophes
+    """
+    # Skip processing if the text is empty or None
+    if not text:
+        return text
+        
+    # Replace any standalone apostrophes (not already escaped) with escaped versions
+    # This regex looks for apostrophes that aren't already preceded by a backslash
+    return re.sub(r"(?<!\\)'", r"\'", text)
+
+
 def call_openai(prompt: str, system_message: str, api_key: str, model: str) -> str:
     """
     Call the OpenAI API to generate translated text using the chat completions endpoint.
@@ -642,6 +665,9 @@ def translate_text(text: str, target_language: str, api_key: str, model: str, pr
         
     # Call OpenAI API to get the translation
     translated = call_openai(prompt, system_message, api_key, model)
+    
+    # Ensure apostrophes are properly escaped
+    translated = escape_apostrophes(translated)
 
     return translated
 
@@ -698,11 +724,14 @@ def translate_plural_text(source_plural: Dict[str, str], target_language: str, a
         
         # Validate the response is a dictionary
         if isinstance(plural_dict, dict):
+            # Ensure apostrophes are properly escaped in all plural forms
+            for quantity, text in plural_dict.items():
+                plural_dict[quantity] = escape_apostrophes(text)
             return plural_dict
         else:
             # Fallback if not a proper dictionary
             logger.warning(f"Unexpected plural translation format: {translation_output}")
-            return {"other": translation_output}
+            return {"other": escape_apostrophes(translation_output)}
     except Exception as e:
         logger.error(f"Error parsing plural translation JSON: {e}. Falling back to single form.")
         raise

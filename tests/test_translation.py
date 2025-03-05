@@ -21,8 +21,73 @@ from AndroidResourceTranslator import (
     translate_plural_text,
     auto_translate_resources,
     AndroidResourceFile,
-    AndroidModule
+    AndroidModule,
+    escape_apostrophes
 )
+
+
+class TestApostropheEscaping(unittest.TestCase):
+    """Tests for the apostrophe escaping functionality."""
+    
+    def test_escape_apostrophes(self):
+        """Test that apostrophes are properly escaped."""
+        test_cases = [
+            # Format: (input, expected output)
+            ("No apostrophes here", "No apostrophes here"),
+            ("Apostrophe's need escaping", "Apostrophe\\'s need escaping"),
+            ("Multiple apostrophes' in one's text", "Multiple apostrophes\\' in one\\'s text"),
+            ("Already escaped apostrophe \\'s fine", "Already escaped apostrophe \\'s fine"),
+            ("Mixed escaping: one's and one\\'s", "Mixed escaping: one\\'s and one\\'s"),
+            ("", ""),  # Empty string
+            (None, None),  # None value
+            ("Special ' chars ' everywhere '", "Special \\' chars \\' everywhere \\'"),
+        ]
+        
+        for input_text, expected in test_cases:
+            with self.subTest(input_text=input_text):
+                result = escape_apostrophes(input_text)
+                self.assertEqual(result, expected)
+
+    def test_escape_apostrophes_integration_with_translate_text(self):
+        """Test that translate_text properly escapes apostrophes in results."""
+        with patch('AndroidResourceTranslator.call_openai') as mock_call_openai:
+            # Configure mock to return text with apostrophes
+            mock_call_openai.return_value = "Si us plau, activa Scrolless a la configuració d'accessibilitat."
+            
+            # Execute the function
+            result = translate_text(
+                "Please enable Scrolless in accessibility settings.", 
+                target_language="ca", 
+                api_key="test_api_key", 
+                model="test-model", 
+                project_context=""
+            )
+            
+            # Verify results - apostrophes should be escaped
+            self.assertEqual(
+                result, 
+                "Si us plau, activa Scrolless a la configuració d\\'accessibilitat."
+            )
+
+    def test_escape_apostrophes_integration_with_translate_plural_text(self):
+        """Test that translate_plural_text properly escapes apostrophes in results."""
+        with patch('AndroidResourceTranslator.call_openai') as mock_call_openai:
+            # Configure mock with JSON plural response containing apostrophes
+            mock_call_openai.return_value = '{"one": "%d element d\'accessibilitat", "other": "%d elements d\'accessibilitat"}'
+            
+            # Execute the function
+            source_plural = {"one": "%d accessibility item", "other": "%d accessibility items"}
+            result = translate_plural_text(
+                source_plural, 
+                target_language="ca", 
+                api_key="test_api_key", 
+                model="test-model", 
+                project_context=""
+            )
+            
+            # Verify results - apostrophes should be escaped in all plural forms
+            self.assertEqual(result["one"], "%d element d\\'accessibilitat")
+            self.assertEqual(result["other"], "%d elements d\\'accessibilitat")
 
 
 @patch('AndroidResourceTranslator.call_openai')

@@ -30,7 +30,6 @@ from git_utils import (
 # ------------------------------------------------------------------------------
 TRANSLATION_GUIDELINES = """\
 Follow these guidelines carefully.
-
 **Purpose & Context:**  
 This translation is for an Android application's UI. Use concise, clear language consistent with standard Android UI conventions. Do not alter the intended meaning of the text.
 
@@ -44,8 +43,29 @@ This translation is for an Android application's UI. Use concise, clear language
 Do not translate system state words (e.g., WARNING, FAILED, SUCCESS) or any technical and branded terms. Always leave these in their original English, uppercase form.
 
 **Terminology & Natural Expressions:**  
-Translate in a natural, concise style that matches standard Android UI conventions. 
+Translate in a natural, concise style that matches standard Android UI conventions.
 Avoid overly literal translations that may sound awkward. When a technical term or proper noun is more recognizable in English for that language, keep it in English.
+
+**Handling Idioms and Metaphors:**
+For idiomatic expressions or culturally-charged phrases, translate the intended meaning rather than literally. For example, phrases like "brain rot" or "mental decay" should be translated to convey "wasted time" or "mindless activity" in a way that sounds natural in the target language. The goal is to preserve the emotional impact and meaning rather than the exact wording.
+
+**Tone and Formality Consistency:**
+Maintain consistent formality throughout the translation based on these principles:
+- Default to a conversational but respectful tone appropriate for a consumer app
+- Match the formality level commonly used in popular, well-localized apps in the target language
+- When unsure, prefer slightly more formal over too casual, as this is generally safer across cultures
+- For apps targeting all ages, avoid slang, regional dialects, or expressions that may not be universally understood
+- Use direct address forms (equivalent to "you" in English) that feel natural in the target language
+
+**Technical Terms:**
+Terms like 'accessibility service' and app-specific features should be translated using standard UI terminology in the target language.
+
+**Quality Verification:**
+After completing translation:
+1. Verify no characters from other writing systems have been accidentally included
+2. Ensure consistent terminology is used throughout
+3. Check that idiomatic expressions are natural in the target language
+4. Confirm that the formality level is appropriate and consistent
 
 **Examples (Portuguese of Portugal):**  
 - "Message Sent" → ✅ "Mensagem enviada" (❌ "Mensagem foi enviada")  
@@ -61,17 +81,13 @@ Preserve all proper nouns, feature names, and trademarked or branded terms in th
 **IMPORTANT Output Requirements:**  
 Return ONLY the final translated text as a single plain line! Preserving only any required formatting from the source.
 Do not include the surrounding Android XML structure (<string> tags, etc.). Only output the translated content!
-
-Example: 
+Example:
   Input: "Welcome, <b>%1$s</b>! You have %2$d points."
   Correct output: "Dobrodošli, <b>%1$s</b>! Imate %2$d poena."
   INCORRECT output: "<string name="welcome_message">Dobrodošli, <b>%1$s</b>! Imate %2$d poena.</string>"
-
 """
-
 PLURAL_GUIDELINES_ADDITION = """\
 For plural resources, follow these guidelines:
-
 1. **Plural Keys:**  
    If the source resource contains only a single plural key (e.g., "other") but the target language requires multiple forms, include all necessary plural keys as defined by the target language's pluralization rules.  
    *Example:* If the English source is `<item quantity="other">%d day left</item>`, the target translation should include:
@@ -79,15 +95,12 @@ For plural resources, follow these guidelines:
    - `<item quantity="one">%d day left</item>`
    - `<item quantity="many">%d days left</item>`
    (Adjust the text according to correct singular and plural usage in the target language. Refer to the target language's guidelines for keys such as zero, one, two, few, many, and other.)
-
 2. **Output Format:**  
    Return ONLY a JSON object containing the plural mapping as a single plain line. Do not include any markdown formatting, code blocks, or additional commentary unless already present in the source.
 """
-
 SYSTEM_MESSAGE_TEMPLATE = """\
 You are a professional translator translating textual UI elements within an Android from English into {target_language}. Follow user guidelines closely.
 """
-
 TRANSLATE_FINAL_TEXT = """\
 Translate the following string resource provided after the dashed line to the values-{target_language}/string.xml file for the language: {target_language}
 ----------

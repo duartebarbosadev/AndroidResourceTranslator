@@ -20,8 +20,8 @@ There are several ways you can contribute to the project:
 
 1. **Fork and Clone the Repository**:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/Android-Resource-Translator.git
-   cd Android-Resource-Translator
+   git clone https://github.com/duartebarbosadev/AndroidResourceTranslator.git
+   cd AndroidResourceTranslator
    ```
 
 2. **Set Up a Virtual Environment**:
@@ -45,23 +45,15 @@ python -m unittest discover tests
 
 # Run a specific test file
 python -m unittest tests/test_integration.py
-
-# Run a specific test case
-python -m unittest tests.test_integration.TestTranslation.test_translate_text
 ```
 
-## Coding Guidelines
+## Reporting Issues
 
-Please follow these guidelines when contributing code:
-
-- **Imports**: Group standard library, third-party, and local imports with a blank line between groups. Use absolute imports.
-- **Formatting**: Use 4 spaces for indentation.
-- **Types**: Use type hints for function parameters and return values. Use TypedDict and Dict[K, V] for complex structures.
-- **Naming**: Use snake_case for variables and functions, CamelCase for classes. Use descriptive names.
-- **Error Handling**: Use specific exception types with informative error messages. Log exceptions with the logger.
-- **Logging**: Use the logger module with appropriate log levels (debug, info, error) rather than print statements.
-- **Comments**: Include docstrings for classes and functions following the triple-quote style.
-- **XML Handling**: Preserve XML formatting when possible. Use proper escaping for special characters.
+When reporting issues, please include:
+- A clear description of the problem
+- Steps to reproduce
+- Expected vs actual results
+- Screenshots (if relevant)
 
 ## Pull Request Process
 
@@ -86,6 +78,26 @@ When testing functionality that uses the OpenAI API:
    ```
 3. Be mindful of API usage costs when running tests.
 
+## Code Style
+
+Please follow these guidelines when contributing code:
+
+- **Imports**: Group standard library, third-party, and local imports with a blank line between groups. Use absolute imports.
+- **Formatting**: Use 4 spaces for indentation.
+- **Naming**: Use snake_case for variables and functions, CamelCase for classes. Use descriptive names.
+- **Logging**: Use the logger module with appropriate log levels (debug, info, error) rather than print statements.
+- **Comments**: Include docstrings for classes and functions following the triple-quote style.
+
+## Testing
+
+```bash
+# Run all tests
+python -m unittest discover tests
+
+# Run a specific test
+python -m unittest tests/test_integration.py
+```
+
 ## Getting Help
 
 If you need help with contributing, feel free to:
@@ -95,4 +107,5 @@ If you need help with contributing, feel free to:
 
 ## Recognition
 
-Contributors will be acknowledged in the project's documentation. Thank you for your valuable contributions!
+Contributors will be acknowledged in the project's documentation. 
+Thank you for your valuable contributions!

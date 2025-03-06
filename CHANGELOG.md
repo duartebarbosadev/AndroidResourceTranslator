@@ -7,9 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - YYYY-MM-DD
 
 ### Added
-* This template of a changelog. It is not really the changelog for this
-  template repository.
-  
+
 ### Changed
 
 ### Deprecated
@@ -18,5 +16,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.2.0a] - 2025-03-06
 
-## [x.x.x] - YYYY-MM-DD
+### Added
+* Initial release of Android Resource Translator
+* Support for automatically translating Android string resources using OpenAI API
+* Ability to handle singular and plural string resources
+* Detection of missing translations across resource files
+* XML formatting preservation when updating resource files
+* Support for GitHub Actions workflow
+* Comprehensive documentation in README.md
+* Complete test suite covering all major functionality
+* Docker support for containerized execution
+* Configurable logging with different verbosity levels
+* Support for custom project context to improve translation quality
+* Handling of apostrophes and special characters in translations
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed

@@ -133,7 +133,7 @@ We love to see our tool in action! Here are some projects that are using Android
 
 Contributions are very welcome! If you have ideas for improvements or spot any issues, please open an issue or submit a pull request.
 
-For detailed guidelines on how to contribute, please see our [Contributing Guide](.github/CONTRIBUTING).
+For detailed guidelines on how to contribute, please see our [Contributing Guide](.github/CONTRIBUTING.md).
 
 ## Changelog
 

@@ -16,6 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.2.1a] - 2025-03-06
+
+### Added
+* Enhanced translation guidelines with specific sections for:
+  * Handling idioms and metaphors with natural language equivalents
+  * Maintaining consistent tone and formality across translations
+  * Improved guidance on regional vocabulary and dialect considerations
+
+### Changed
+* Refined translation prompts to produce more natural and contextually appropriate translations
+
 ## [0.2.0a] - 2025-03-06
 
 ### Added

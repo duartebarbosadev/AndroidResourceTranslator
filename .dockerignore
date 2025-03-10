@@ -4,4 +4,7 @@
 # ...except these files:
 !Dockerfile
 !requirements.txt
-!app/*
+!app/
+
+# Ignore tests folder
+app/tests/

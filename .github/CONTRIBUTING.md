@@ -63,10 +63,6 @@ When reporting issues, please include:
 4. **Follow Coding Standards**: Ensure your code follows the project's coding style.
 5. **Submit PR**: Submit a pull request with a clear description of your changes.
 
-## Versioning
-
-This project follows [Semantic Versioning](https://semver.org/). Please update the CHANGELOG.md file with your changes under the "Unreleased" section.
-
 ## Testing with OpenAI API
 
 When testing functionality that uses the OpenAI API:

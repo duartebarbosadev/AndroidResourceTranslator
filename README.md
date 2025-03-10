@@ -135,10 +135,6 @@ Contributions are very welcome! If you have ideas for improvements or spot any i
 
 For detailed guidelines on how to contribute, please see our [Contributing Guide](.github/CONTRIBUTING.md).
 
-## Changelog
-
-All notable changes are documented in [CHANGELOG.md](./CHANGELOG.md).
-
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).

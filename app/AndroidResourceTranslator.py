@@ -47,14 +47,11 @@ Translate in a natural, concise style that matches standard Android UI conventio
 Avoid overly literal translations that may sound awkward. When a technical term or proper noun is more recognizable in English for that language, keep it in English.
 
 **Handling Idioms and Metaphors:**
-For idiomatic expressions or culturally-charged phrases, translate the intended meaning rather than literally. For example, phrases like "brain rot" if there's no direct translation should be translated to convey "mental decay" in a way that sounds natural in the target language.
+For idiomatic expressions or culturally-charged phrases, that there's no direct equivalent, translate the intended meaning rather than literally. For example, phrases like "brain rot" if there's no direct translation should be translated to convey "mental decay" in a way that sounds natural in the target language.
 
 **Tone and Formality Consistency:**
 Maintain consistent formality throughout the translation based on these principles:
 - Default to a conversational but respectful tone appropriate for a consumer android app
-- Match the formality level commonly used in popular, well-localized apps in the target language
-- When unsure, prefer slightly more formal over too casual, as this is generally safer across cultures
-- Use direct address forms (equivalent to "you" in English) that feel natural in the target language
 
 **Technical Terms:**
 Terms like 'accessibility service' and app-specific features should be translated using standard UI terminology in the target language.

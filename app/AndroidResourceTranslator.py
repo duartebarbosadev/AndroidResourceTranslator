@@ -47,6 +47,7 @@ Avoid overly literal translations that may sound awkward. When a technical term 
 
 **Handling Idioms and Metaphors:**
 For idiomatic expressions or culturally-charged phrases, that there's no direct equivalent, translate the intended meaning rather than literally. For example, phrases like "brain rot" if there's no direct translation should be translated to convey "mental decay" in a way that sounds natural in the target language.
+Make sure to keep the translation within a reasonable size, not exceeding 20% of the original text length. If the translation is significantly longer, and if possible consider rephrasing or simplifying it while maintaining the original meaning.
 
 **Tone and Formality Consistency:**
 Maintain consistent formality throughout the translation based on these principles:

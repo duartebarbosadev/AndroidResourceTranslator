@@ -33,6 +33,9 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '**/values/strings.xml' # Call only when strings.xml is updated
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -82,6 +85,15 @@ jobs:
           assignees: "[yourname]"
           reviewers: "[yourname]"
 ```
+
+### ⚠️ API Usage and Pricing Considerations
+
+Please note that each time the action runs, it will process **all** missing translations from the beginning. This can impact your OpenAI API usage and associated costs, especially for large projects with many strings or frequent commits.
+
+**Best practices to manage API costs:**
+- Configure workflow triggers carefully as shown in the advanced example (`paths: '**/values/strings.xml'`) to only run when string resources actually change
+- Keep your repository up-to-date with translations to minimize the number of strings that need processing
+- Monitor your OpenAI API usage regularly to avoid unexpected charges
 
 ## Local Execution
 

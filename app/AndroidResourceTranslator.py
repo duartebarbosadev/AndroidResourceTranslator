@@ -19,7 +19,6 @@ from lxml import etree
 # Import git utilities from separate module
 from git_utils import (
     parse_gitignore, 
-    parse_gitignore_file, 
     find_all_gitignores, 
     is_ignored_by_gitignore, 
     is_ignored_by_gitignores
@@ -52,6 +51,8 @@ For idiomatic expressions or culturally-charged phrases, that there's no direct 
 **Tone and Formality Consistency:**
 Maintain consistent formality throughout the translation based on these principles:
 - Default to a conversational but respectful tone appropriate for a consumer android app
+- Match the formality level commonly used in popular, well-localized android apps in the target language
+- Use direct address forms (equivalent to "you" in English) that feel natural in the target language
 
 **Technical Terms:**
 Terms like 'accessibility service' and app-specific features should be translated using standard UI terminology in the target language.

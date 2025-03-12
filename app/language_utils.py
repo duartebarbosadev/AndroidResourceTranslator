@@ -26,16 +26,15 @@ def get_language_name(locale_code: str) -> str:
         if locale_code == "default":
             return "Default (English)"
         
-        # Replace from locale_code "-r" to "-" for Android resource format
-    
-        standard_code = locale_code.replace("b+", "")
-        standard_code = standard_code.replace("-r", "_")
-        standard_code = standard_code.replace("-", "_")
-        standard_code = standard_code.replace("+", "_")
+        # Normalize the locale code using regex
+        import re
+        normalized_code = re.sub(r'^b\+', '', locale_code)
+        normalized_code = re.sub(r'-r', '_', normalized_code)
+        normalized_code = re.sub(r'-', '_', normalized_code)
+        normalized_code = re.sub(r'\+', '_', normalized_code)
         
         # Parse the locale using Babel
-        locale = Locale.parse(standard_code)
-       
+        locale = Locale.parse(normalized_code)
         # Return the full display name in English
         return locale.get_display_name(locale='en')
        

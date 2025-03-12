@@ -38,7 +38,7 @@ class TestLanguageUtils(unittest.TestCase):
     def test_get_language_name_android_format(self):
         """Test with Android's resource format (using rXX instead of -XX)."""
         self.assertEqual(get_language_name("en-rUS"), "English (United States)")
-        self.assertEqual(get_language_name("zh-rCN"), "Chinese (Simplified Han,China)")
+        self.assertEqual(get_language_name("zh-rCN"), "Chinese (Simplified, China)")
     
     def test_get_language_name_unknown_language(self):
         """Test that unknown languages return their code."""
@@ -87,8 +87,8 @@ class TestLanguageUtils(unittest.TestCase):
         self.assertEqual(get_language_name("ta-rIN"), "Tamil (India)")
         self.assertEqual(get_language_name("tr-rTR"), "Turkish (Türkiye)")
         self.assertEqual(get_language_name("uk-rUA"), "Ukrainian (Ukraine)")
-        self.assertEqual(get_language_name("zh-rCN"), "Chinese (Simplified Han,China)")
-        self.assertEqual(get_language_name("zh-rTW"), "Chinese (Traditional Han,Taiwan)")
+        self.assertEqual(get_language_name("zh-rCN"), "Chinese (Simplified, China)")
+        self.assertEqual(get_language_name("zh-rTW"), "Chinese (Traditional, Taiwan)")
     
     @patch('language_utils.logger')
     def test_get_language_name_logs_warning(self, mock_logger):

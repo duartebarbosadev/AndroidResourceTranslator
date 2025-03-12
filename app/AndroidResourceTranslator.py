@@ -668,6 +668,10 @@ def translate_text(text: str, target_language: str, api_key: str, model: str, pr
     # Don't process empty strings
     if text.strip() == "":
         return ""
+    
+    # Get the language name for better context in prompts
+    from language_utils import get_language_name
+    language_name = get_language_name(target_language)
         
     # Build the prompt with translation guidelines and the source text
     prompt = (TRANSLATION_GUIDELINES +
@@ -675,7 +679,7 @@ def translate_text(text: str, target_language: str, api_key: str, model: str, pr
               text)
               
     # Configure the system message for the API call
-    system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=target_language)
+    system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=language_name)
     if project_context:
         system_message += f"\nProject context: {project_context}"
         
@@ -720,6 +724,10 @@ def translate_plural_text(source_plural: Dict[str, str], target_language: str, a
     # Convert source plural forms to JSON format
     source_json = json.dumps(source_plural, indent=2)
     
+    # Get the language name for better context in prompts
+    from language_utils import get_language_name
+    language_name = get_language_name(target_language)
+    
     # Build the prompt with both standard and plural-specific guidelines
     prompt = (TRANSLATION_GUIDELINES +
               PLURAL_GUIDELINES_ADDITION +
@@ -727,7 +735,7 @@ def translate_plural_text(source_plural: Dict[str, str], target_language: str, a
               source_json)
               
     # Configure the system message for the API call
-    system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=target_language)
+    system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=language_name)
     if project_context:
         system_message += f"\nProject context: {project_context}"
     
@@ -819,7 +827,7 @@ def _translate_missing_strings(
     for key in sorted(missing_strings):
         source_text = module_default_strings[key]
         # Skip empty strings
-        if source_text.strip() == "":
+        if (source_text.strip() == ""):
             res.strings[key] = ""
             continue
             
@@ -1200,6 +1208,9 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
 # Translation Report Generator
 # ------------------------------------------------------------------------------
 
+# Import language utilities
+from language_utils import get_language_name
+
 def create_translation_report(translation_log):
     """
     Generate a Markdown formatted translation report as a string.
@@ -1221,7 +1232,9 @@ def create_translation_report(translation_log):
                 
             module_has_translations = True
             has_translations = True
-            languages_report += f"### Language: {lang}\n\n"
+            # Get the language name from the code (will return lang code if name not found)
+            lang_name = get_language_name(lang)
+            languages_report += f"### Language: {lang_name}\n\n"
             
             if has_string_translations:
                 languages_report += "| Key | Source Text | Translated Text |\n"

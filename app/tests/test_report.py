@@ -79,7 +79,7 @@ class TestReporting(unittest.TestCase):
         self.assertIn("## Module: test_module", report)
         
         # Check Spanish section
-        self.assertIn("### Language: es", report)
+        self.assertIn("### Language: Spanish", report)
         self.assertIn("| Key | Source Text | Translated Text |", report)
         self.assertIn("| hello | Hello World | Hola Mundo |", report)
         self.assertIn("| goodbye | Goodbye | Adiós |", report)
@@ -88,7 +88,7 @@ class TestReporting(unittest.TestCase):
         self.assertIn("| other | %d días |", report)
         
         # Check French section
-        self.assertIn("### Language: fr", report)
+        self.assertIn("### Language: French", report)
         self.assertIn("| hello | Hello World | Bonjour le monde |", report)
     
     @patch('AndroidResourceTranslator.AndroidResourceFile.parse_file')

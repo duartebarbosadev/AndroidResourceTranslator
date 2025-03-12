@@ -39,6 +39,13 @@ This translation is for an Android application's UI. Use concise, clear language
 - Preserve all whitespace, line breaks, and XML formatting exactly as in the source.  
 - Escape apostrophes with a backslash (\\') as required by Android.
 
+**Handling Line Breaks:**
+When translating phrases with line breaks (e.g., "Temporary\\nUnblock"):
+1. Read the entire phrase to understand its complete meaning
+2. Translate the complete phrase into the target language
+3. Apply the line break in the translation if it maintains similar meaning
+4. Only omit the line break if it doesn't make sense in the target language
+
 **System Terms:**  
 Do not translate system state words (e.g., WARNING, FAILED, SUCCESS) or any technical and branded terms. Always leave these in their original English, uppercase form.
 
@@ -73,7 +80,9 @@ After completing translation:
 **Examples (Portuguese of Portugal):**  
 - "Message Sent" → ✅ "Mensagem enviada" (❌ "Mensagem foi enviada")  
 - "Upload Speed" → ✅ "Velocidade de upload" (❌ "Velocidade de envio")
-- "Endless scrolling" → ✅ "Scrolling sem fim" (❌ "Deslocamento infinito")
+- "Endless scrolling" → ✅ "Scroll sem fim" (❌ "Deslocamento infinito")
+- "Temporary\\nUnblock" → ✅ "Desbloquear\\nTemporariamente" (❌ "Temporário\nDesbloquear")
+
 Always refer to standard, widely accepted terms for the target language's user interface.
 
 **Dialect and Regional Vocabulary:**  

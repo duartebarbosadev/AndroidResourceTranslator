@@ -15,6 +15,7 @@ from xml.etree import ElementTree
 from collections import defaultdict
 from typing import Dict, Set, List, Tuple
 from lxml import etree
+from language_utils import get_language_name
 
 # Import git utilities from separate module
 from git_utils import (
@@ -670,7 +671,6 @@ def translate_text(text: str, target_language: str, api_key: str, model: str, pr
         return ""
     
     # Get the language name for better context in prompts
-    from language_utils import get_language_name
     language_name = get_language_name(target_language)
         
     # Build the prompt with translation guidelines and the source text
@@ -725,7 +725,6 @@ def translate_plural_text(source_plural: Dict[str, str], target_language: str, a
     source_json = json.dumps(source_plural, indent=2)
     
     # Get the language name for better context in prompts
-    from language_utils import get_language_name
     language_name = get_language_name(target_language)
     
     # Build the prompt with both standard and plural-specific guidelines
@@ -1207,9 +1206,6 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
 # ------------------------------------------------------------------------------
 # Translation Report Generator
 # ------------------------------------------------------------------------------
-
-# Import language utilities
-from language_utils import get_language_name
 
 def create_translation_report(translation_log):
     """

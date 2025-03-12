@@ -30,6 +30,7 @@ jobs:
         python3 -u -m unittest app/tests/test_xml_formatting.py
         python3 -u -m unittest app/tests/test_gitignore.py
         python3 -u -m unittest app/tests/test_integration.py
+        python3 -u -m unittest app/tests/test_language_utils.py
 
     - name: Verify that the Docker image for the action builds
       run: docker build . --file Dockerfile

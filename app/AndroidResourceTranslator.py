@@ -34,7 +34,7 @@ Follow these guidelines carefully.
 This translation is for an Android application's UI. Use concise, clear language consistent with standard Android UI conventions. Do not alter the intended meaning of the text.
 
 **Formatting & Structure:**  
-- Keep all placeholders (e.g., %d, %s, %1$s) exactly as in the source. If the target language requires reordering, ensure that the same placeholders appear and are correctly positioned according to the language's syntax.
+- Keep all placeholders (e.g., %d, %s, %1$s, %1$d) exactly as in the source. If the target language requires reordering, ensure that the same placeholders appear and are correctly positioned according to the language's syntax.
 - Maintain the integrity of HTML, CDATA, or XML structures; translate only the textual content.  
 - Preserve all whitespace, line breaks, and XML formatting exactly as in the source.  
 - Escape apostrophes with a backslash (\\') as required by Android.
@@ -69,6 +69,21 @@ Maintain consistent formality throughout the translation based on these principl
 **Technical Terms:**
 Terms like 'accessibility service' and app-specific features should be translated using standard UI terminology in the target language.
 
+**Examples (Portuguese of Portugal):**  
+- "Message Sent" → ✅ "Mensagem enviada" (❌ "Mensagem foi enviada")  
+- "Upload Speed" → ✅ "Velocidade de upload" (❌ "Velocidade de envio")
+- "Endless scrolling" → ✅ "Scroll sem fim" (❌ "Deslocamento infinito")
+- "Temporary\\nUnblock" → ✅ "Desbloquear\\nTemporariamente" (❌ "Temporário\nDesbloquear") (Note that in Portuguese the word order is reversed as per grammar rules)
+
+Learn from the examples above and apply the same principles to other translations.
+
+**Dialect and Regional Vocabulary:**  
+Unless otherwise specified, use always the vocabulary appropriate to the target dialect (e.g., **pt -> Português de Portugal**) and avoid terms from other variants.
+
+**Brand Names and Proper Nouns:**
+All brand names (like GitHub, Android, Google), proper nouns, feature names, and trademarked terms MUST remain in their original English form with exact spelling. 
+Do not apply any grammatical inflections, declensions, or case modifications to these terms in any language, even when the target language's grammar would typically require it. For example, "GitHub" must always remain "GitHub" - never "GitHubie", "GitHuba", etc.
+
 **Quality Verification:**
 After completing translation:
 1. Verify no characters from other writing systems have been accidentally included
@@ -76,20 +91,7 @@ After completing translation:
 3. Check that idiomatic expressions are natural in the target language
 4. Verify translation accuracy
 5. Confirm that the formality level is appropriate and consistent
-
-**Examples (Portuguese of Portugal):**  
-- "Message Sent" → ✅ "Mensagem enviada" (❌ "Mensagem foi enviada")  
-- "Upload Speed" → ✅ "Velocidade de upload" (❌ "Velocidade de envio")
-- "Endless scrolling" → ✅ "Scroll sem fim" (❌ "Deslocamento infinito")
-- "Temporary\\nUnblock" → ✅ "Desbloquear\\nTemporariamente" (❌ "Temporário\nDesbloquear")
-
-Always refer to standard, widely accepted terms for the target language's user interface.
-
-**Dialect and Regional Vocabulary:**  
-Unless otherwise specified, use always the vocabulary appropriate to the target dialect (e.g., **pt -> Português de Portugal**) and avoid terms from other variants.
-
-**General Note:**  
-Preserve all proper nouns, feature names, and trademarked or branded terms in their original English form.
+6. Verify all rules and guidelines have been followed!
 
 **IMPORTANT Output Requirements:**  
 Return ONLY the final translated text as a single plain line! Preserving only any required formatting from the source.
@@ -115,7 +117,7 @@ SYSTEM_MESSAGE_TEMPLATE = """\
 You are a professional translator translating textual UI elements within an Android from English into {target_language}. Follow user guidelines closely.
 """
 TRANSLATE_FINAL_TEXT = """\
-Translate the following string resource provided after the dashed line to the values-{target_language}/string.xml file for the language: {target_language}
+Translate the following string provided after the dashed line to language: {target_language}
 ----------
 """
 
@@ -205,7 +207,7 @@ class AndroidModule:
         for language, resources in sorted(self.language_resources.items()):
             for resource in resources:
                 sums = resource.summary()
-                logger.info(f"  [{language}] {resource.path} | Strings: {sums['strings']}, Plurals: {sums['plurals']}")
+                logger.debug(f"  [{language}] {resource.path} | Strings: {sums['strings']}, Plurals: {sums['plurals']}")
 
 
 def detect_language_from_path(file_path: Path) -> str:
@@ -684,7 +686,7 @@ def translate_text(text: str, target_language: str, api_key: str, model: str, pr
         
     # Build the prompt with translation guidelines and the source text
     prompt = (TRANSLATION_GUIDELINES +
-              TRANSLATE_FINAL_TEXT.format(target_language=target_language) +
+              TRANSLATE_FINAL_TEXT.format(target_language=language_name) +
               text)
               
     # Configure the system message for the API call

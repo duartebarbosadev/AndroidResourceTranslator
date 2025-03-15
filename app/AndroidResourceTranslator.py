@@ -584,6 +584,102 @@ def escape_apostrophes(text: str) -> str:
     return re.sub(r"(?<!\\)'", r"\'", text)
 
 
+def escape_percent(text: str) -> str:
+    """
+    Ensure percent signs in the text are properly escaped for Android resource files.
+    
+    This function checks if percent signs are already properly escaped with a backslash (\\%)
+    and adds the escape character if needed. This is important for Android resource files
+    as unescaped percent signs can be mistaken for format specifiers.
+    
+    Args:
+        text: The text to process
+        
+    Returns:
+        The text with properly escaped percent signs
+    """
+    # Skip processing if the text is empty or None
+    if not text:
+        return text
+        
+    # Replace any standalone percent signs (not already escaped) with escaped versions
+    # This regex looks for percent signs that aren't already preceded by a backslash
+    # and aren't part of a format specifier like %s, %d, %1$s, etc.
+    return re.sub(r'(?<!\\)%(?![0-9]?[$]?[sd])', r'\\%', text)
+
+
+def escape_double_quotes(text: str) -> str:
+    """
+    Ensure double quotes in the text are properly escaped for Android resource files.
+    
+    This function checks if double quotes are already properly escaped with a backslash (\")
+    and adds the escape character if needed. This is essential for Android resource files
+    as unescaped double quotes can cause XML parsing errors.
+    
+    Args:
+        text: The text to process
+        
+    Returns:
+        The text with properly escaped double quotes
+    """
+    # Skip processing if the text is empty or None
+    if not text:
+        return text
+        
+    # Replace any standalone double quotes (not already escaped) with escaped versions
+    # This regex looks for double quotes that aren't already preceded by a backslash
+    return re.sub(r'(?<!\\)"', r'\\"', text)
+
+
+def escape_at_symbol(text: str) -> str:
+    """
+    Ensure at symbols in the text are properly escaped for Android resource files.
+    
+    This function checks if at symbols are already properly escaped with a backslash (\\@)
+    and adds the escape character if needed. This is important for Android resource files
+    as unescaped at symbols can be interpreted as references to resources.
+    
+    Args:
+        text: The text to process
+        
+    Returns:
+        The text with properly escaped at symbols
+    """
+    # Skip processing if the text is empty or None
+    if not text:
+        return text
+        
+    # Replace any standalone at symbols (not already escaped) with escaped versions
+    # This regex looks for at symbols that aren't already preceded by a backslash
+    return re.sub(r'(?<!\\)@', r'\\@', text)
+
+
+def escape_special_chars(text: str) -> str:
+    """
+    Ensure all special characters in the text are properly escaped for Android resource files.
+    
+    This function applies all individual escape functions to handle apostrophes, percent signs,
+    double quotes, and at symbols in a single pass.
+    
+    Args:
+        text: The text to process
+        
+    Returns:
+        The text with all special characters properly escaped
+    """
+    # Skip processing if the text is empty or None
+    if not text:
+        return text
+    
+    # Apply each escape function in sequence
+    text = escape_apostrophes(text)
+    text = escape_percent(text)
+    text = escape_double_quotes(text)
+    text = escape_at_symbol(text)
+    
+    return text
+
+
 def call_openai(prompt: str, system_message: str, api_key: str, model: str) -> str:
     """
     Call the OpenAI API to generate translated text using the chat completions endpoint.
@@ -697,8 +793,8 @@ def translate_text(text: str, target_language: str, api_key: str, model: str, pr
     # Call OpenAI API to get the translation
     translated = call_openai(prompt, system_message, api_key, model)
     
-    # Ensure apostrophes are properly escaped
-    translated = escape_apostrophes(translated)
+    # Ensure all special characters are properly escaped
+    translated = escape_special_chars(translated)
 
     return translated
 
@@ -758,14 +854,14 @@ def translate_plural_text(source_plural: Dict[str, str], target_language: str, a
         
         # Validate the response is a dictionary
         if isinstance(plural_dict, dict):
-            # Ensure apostrophes are properly escaped in all plural forms
+            # Ensure all special characters are properly escaped in all plural forms
             for quantity, text in plural_dict.items():
-                plural_dict[quantity] = escape_apostrophes(text)
+                plural_dict[quantity] = escape_special_chars(text)
             return plural_dict
         else:
             # Fallback if not a proper dictionary
             logger.warning(f"Unexpected plural translation format: {translation_output}")
-            return {"other": escape_apostrophes(translation_output)}
+            return {"other": escape_special_chars(translation_output)}
     except Exception as e:
         logger.error(f"Error parsing plural translation JSON: {e}. Falling back to single form.")
         raise

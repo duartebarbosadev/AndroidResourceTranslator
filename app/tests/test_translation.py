@@ -22,12 +22,16 @@ from AndroidResourceTranslator import (
     auto_translate_resources,
     AndroidResourceFile,
     AndroidModule,
-    escape_apostrophes
+    escape_apostrophes,
+    escape_percent,
+    escape_double_quotes,
+    escape_at_symbol,
+    escape_special_chars
 )
 
 
-class TestApostropheEscaping(unittest.TestCase):
-    """Tests for the apostrophe escaping functionality."""
+class TestSpecialCharacterEscaping(unittest.TestCase):
+    """Tests for the special character escaping functionality."""
     
     def test_escape_apostrophes(self):
         """Test that apostrophes are properly escaped."""
@@ -46,6 +50,96 @@ class TestApostropheEscaping(unittest.TestCase):
         for input_text, expected in test_cases:
             with self.subTest(input_text=input_text):
                 result = escape_apostrophes(input_text)
+                self.assertEqual(result, expected)
+    
+    def test_escape_percent(self):
+        """Test that percent signs are properly escaped."""
+        test_cases = [
+            # Format: (input, expected output)
+            ("No percent signs here", "No percent signs here"),
+            ("15% discount", "15\\% discount"),
+            ("Multiple % percent % signs", "Multiple \\% percent \\% signs"),
+            ("Already escaped percent \\% is fine", "Already escaped percent \\% is fine"),
+            ("Mixed escaping: 10% and 20\\%", "Mixed escaping: 10\\% and 20\\%"),
+            ("", ""),  # Empty string
+            (None, None),  # None value
+            # Format specifiers should not be escaped
+            ("String with %s format specifier", "String with %s format specifier"),
+            ("Int with %d format specifier", "Int with %d format specifier"),
+            ("Indexed with %1$s format specifier", "Indexed with %1$s format specifier"),
+            # Mix of format specifiers and regular percent signs
+            ("Mix of %s and % signs", "Mix of %s and \\% signs"),
+            ("Pattern 100% %d complete", "Pattern 100\\% %d complete"),
+        ]
+        
+        for input_text, expected in test_cases:
+            with self.subTest(input_text=input_text):
+                result = escape_percent(input_text)
+                self.assertEqual(result, expected)
+    
+    def test_escape_double_quotes(self):
+        """Test that double quotes are properly escaped."""
+        test_cases = [
+            # Format: (input, expected output)
+            ('No double quotes here', 'No double quotes here'),
+            ('Text with "quotes"', 'Text with \\"quotes\\"'),
+            ('Multiple "double" "quotes"', 'Multiple \\"double\\" \\"quotes\\"'),
+            ('Already escaped \\"quotes\\" are fine', 'Already escaped \\"quotes\\" are fine'),
+            ('Mixed escaping: "quote" and \\"quote\\"', 'Mixed escaping: \\"quote\\" and \\"quote\\"'),
+            ("", ""),  # Empty string
+            (None, None),  # None value
+        ]
+        
+        for input_text, expected in test_cases:
+            with self.subTest(input_text=input_text):
+                result = escape_double_quotes(input_text)
+                self.assertEqual(result, expected)
+    
+    def test_escape_at_symbol(self):
+        """Test that at symbols are properly escaped."""
+        test_cases = [
+            # Format: (input, expected output)
+            ("No at symbols here", "No at symbols here"),
+            ("Email: user@example.com", "Email: user\\@example.com"),
+            ("Multiple @ symbols @ here", "Multiple \\@ symbols \\@ here"),
+            ("Already escaped \\@symbol is fine", "Already escaped \\@symbol is fine"),
+            ("Mixed escaping: @symbol and \\@symbol", "Mixed escaping: \\@symbol and \\@symbol"),
+            ("", ""),  # Empty string
+            (None, None),  # None value
+        ]
+        
+        for input_text, expected in test_cases:
+            with self.subTest(input_text=input_text):
+                result = escape_at_symbol(input_text)
+                self.assertEqual(result, expected)
+    
+    def test_escape_special_chars(self):
+        """Test that all special characters are properly escaped in a single pass."""
+        test_cases = [
+            # Format: (input, expected output)
+            ("Normal text", "Normal text"),
+            # Test with individual special characters
+            ("Text with apostrophe's", "Text with apostrophe\\'s"),
+            ("Text with percent 50%", "Text with percent 50\\%"),
+            ('Text with "quotes"', 'Text with \\"quotes\\"'),
+            ("Text with @symbol", "Text with \\@symbol"),
+            # Test with multiple different special characters
+            ('Mixed "quote", apostrophe\'s, 25% and user@example.com',
+             'Mixed \\"quote\\", apostrophe\\\'s, 25\\% and user\\@example.com'),
+            # Test that format specifiers are preserved
+            ("Format %s and %d with %1$s escape", "Format %s and %d with %1$s escape"),
+            # Test with already escaped characters
+            ("Pre-escaped \\'s and \\% and \\@", "Pre-escaped \\'s and \\% and \\@"),
+            # Test with complex mix of escaped and unescaped
+            ('Mixed: "quote" and \\"quote\\", \'single\' and \\\'single\\\', 10% and \\%',
+             'Mixed: \\"quote\\" and \\"quote\\", \\\'single\\\' and \\\'single\\\', 10\\% and \\%'),
+            ("", ""),  # Empty string
+            (None, None),  # None value
+        ]
+        
+        for input_text, expected in test_cases:
+            with self.subTest(input_text=input_text):
+                result = escape_special_chars(input_text)
                 self.assertEqual(result, expected)
 
     def test_escape_apostrophes_integration_with_translate_text(self):
@@ -69,6 +163,27 @@ class TestApostropheEscaping(unittest.TestCase):
                 "Si us plau, activa Scrolless a la configuració d\\'accessibilitat."
             )
 
+    def test_escape_special_chars_integration_with_translate_text(self):
+        """Test that translate_text properly escapes all special characters in results."""
+        with patch('AndroidResourceTranslator.call_openai') as mock_call_openai:
+            # Configure mock to return text with multiple special characters
+            mock_call_openai.return_value = "Mensaje con \"comillas\", apóstrofo', 25% y usuario@ejemplo.com"
+            
+            # Execute the function
+            result = translate_text(
+                "Message with \"quotes\", apostrophe', 25% and user@example.com", 
+                target_language="es", 
+                api_key="test_api_key", 
+                model="test-model", 
+                project_context=""
+            )
+            
+            # Verify results - all special characters should be escaped
+            self.assertEqual(
+                result, 
+                "Mensaje con \\\"comillas\\\", apóstrofo\\', 25\\% y usuario\\@ejemplo.com"
+            )
+
     def test_escape_apostrophes_integration_with_translate_plural_text(self):
         """Test that translate_plural_text properly escapes apostrophes in results."""
         with patch('AndroidResourceTranslator.call_openai') as mock_call_openai:
@@ -88,6 +203,26 @@ class TestApostropheEscaping(unittest.TestCase):
             # Verify results - apostrophes should be escaped in all plural forms
             self.assertEqual(result["one"], "%d element d\\'accessibilitat")
             self.assertEqual(result["other"], "%d elements d\\'accessibilitat")
+            
+    def test_escape_special_chars_integration_with_translate_plural_text(self):
+        """Test that translate_plural_text properly escapes all special characters in results."""
+        with patch('AndroidResourceTranslator.call_openai') as mock_call_openai:
+            # Configure mock with JSON plural response containing multiple special characters
+            mock_call_openai.return_value = """{"one": "%d \\"elemento\\" al 50% en mi@correo", "other": "%d \\"elementos\\" al 50% en mi@correo"}"""
+            
+            # Execute the function
+            source_plural = {"one": "%d \"item\" at 50% in my@email", "other": "%d \"items\" at 50% in my@email"}
+            result = translate_plural_text(
+                source_plural, 
+                target_language="es", 
+                api_key="test_api_key", 
+                model="test-model", 
+                project_context=""
+            )
+            
+            # Verify results - all special characters should be escaped in all plural forms
+            self.assertEqual(result["one"], "%d \\\"elemento\\\" al 50\\% en mi\\@correo")
+            self.assertEqual(result["other"], "%d \\\"elementos\\\" al 50\\% en mi\\@correo")
 
 
 @patch('AndroidResourceTranslator.call_openai')

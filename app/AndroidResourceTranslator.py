@@ -143,6 +143,17 @@ Translate the following string provided after the dashed line to language: {targ
 logger = logging.getLogger(__name__)
 
 
+def _create_secure_fragment_parser() -> etree.XMLParser:
+    """Return an XML parser configured to avoid external entity resolution."""
+    return etree.XMLParser(
+        resolve_entities=False,
+        no_network=True,
+        dtd_validation=False,
+        load_dtd=False,
+        recover=False,
+    )
+
+
 def _normalize_inner_xml(text: str) -> str:
     """Normalize inner XML content for comparison."""
     if text is None:
@@ -182,7 +193,10 @@ def _set_element_inner_xml(element, content: str) -> None:
         return
 
     try:
-        wrapper = etree.fromstring(f"<__wrapper__>{content}</__wrapper__>")
+        parser = _create_secure_fragment_parser()
+        wrapper = etree.fromstring(
+            f"<__wrapper__>{content}</__wrapper__>", parser=parser
+        )
     except etree.XMLSyntaxError:
         element.text = content
         return
@@ -801,7 +815,10 @@ def escape_special_chars(text: str) -> str:
 
     if contains_markup:
         try:
-            wrapper = etree.fromstring(f"<__wrapper__>{text}</__wrapper__>")
+            parser = _create_secure_fragment_parser()
+            wrapper = etree.fromstring(
+                f"<__wrapper__>{text}</__wrapper__>", parser=parser
+            )
             _escape_fragment(wrapper)
             return _serialize_inner_xml(wrapper)
         except etree.XMLSyntaxError:

@@ -109,7 +109,6 @@ python app/AndroidResourceTranslator.py <path> [options]
 | Option                              | Description                               | Default                                     |
 | ----------------------------------- | ----------------------------------------- | ------------------------------------------- |
 | `--dry-run`, `-d`               | Only report missing translations (don't translate) | `False`                              |
-| `--validate-translations`, `-v` | Manually validate each translation        | `False`                                   |
 | `--log-trace`, `-l`             | Enable detailed logging                   | `False`                                   |
 | `--llm-provider`                  | LLM provider:`openai` or `openrouter` | `openrouter`                              |
 | `--model`                         | Model to use                              | `google/gemini-2.5-flash-preview-09-2025` |

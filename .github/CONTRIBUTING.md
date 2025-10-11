@@ -126,8 +126,6 @@ python app/AndroidResourceTranslator.py sample_project/ \
     --project-context "A shopping list mobile application"
 ```
 
-For more test scenarios, refer to the [sample project README](../sample_project/README.md).
-
 ## Code Quality
 
 We use [Ruff](https://docs.astral.sh/ruff/) for code formatting and linting.

@@ -2,7 +2,7 @@
 
 *WIP*
 
-**Android Resource Translator** scans your `strings.xml` files for missing translations and automatically translates them using AI language models (OpenAI, OpenRouter with support for Gemini, Claude, and more).
+**Android Resource Translator** scans your `strings.xml` files for missing translations and automatically translates them using AI language models (OpenAI or OpenRouter).
 
 <!--[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-enabled-brightgreen)](https://github.com/)-->
 
@@ -13,7 +13,7 @@
 
 ### Simple Example (Using OpenRouter with Gemini - Default)
 
-If you want to quickly try out the action with minimal configuration, add this step to your workflow. This uses the default provider (OpenRouter) and model (Gemini):
+If you want to quickly try out the action with minimal configuration, add this step to your workflow. This uses the default provider (OpenRouter) and model (Gemini google/gemini-2.5-flash-preview-09-2025):
 
 ```yaml
 - name: Run Android Resource Translator
@@ -104,6 +104,7 @@ jobs:
 
 Please note that each time the action runs, it will process **all** missing translations. This can impact your API usage and associated costs, especially for large projects with many strings or frequent commits. Meaning that you should accept this action PR's as soon as possible to avoid repeating runs.
 
+We recommend the model google/gemini-2.5-flash-preview-09-2025 as it got the best results in our testing and is not as expensive as the bigger models.
 ## Local Execution
 
 To run the translator on your local machine, execute:
@@ -126,8 +127,8 @@ The action supports the following inputs:
 | **log_trace**                | Enable detailed logging. Use `"true"` for verbose output.                                                                                                                                                                                     | `"false"`                                                              | Yes      | `"true"`                                                               |
 | **llm_provider**             | LLM provider to use for translation. Options are `"openai"` or `"openrouter"`.                                                                                                                                                                 | `"openrouter"`                                                             | Yes      | `"openai"`, `"openrouter"`                                              |
 | **model**                    | Model to use for translation. For OpenAI: `gpt-4o-mini`, `gpt-4o`, etc. For OpenRouter: `google/gemini-2.5-flash-preview-09-2025` (recommended), `anthropic/claude-3.5-sonnet`, etc.                                                                                     | `"google/gemini-2.5-flash-preview-09-2025"`                                                        | Yes      | `"google/gemini-2.5-flash-preview-09-2025"`, `"anthropic/claude-3.5-sonnet"`         |
-| **openrouter_site_url**      | Your site URL for OpenRouter rankings. Used to identify your application in OpenRouter analytics.                                                                                                                                             | `"https://github.com/duartebarbosadev/AndroidResourceTranslator"`     | Yes      | `"https://github.com/your-username/your-repo"`                         |
-| **openrouter_site_name**     | Your site name for OpenRouter rankings. Used to identify your application in OpenRouter analytics.                                                                                                                                            | `"AndroidResourceTranslatorAction"`                                    | Yes      | `"YourAppName"`                                                        |
+| **openrouter_site_url**      | Your site URL for OpenRouter rankings. Used to identify your application in OpenRouter analytics.                                                                                                                                             | `"https://github.com/duartebarbosadev/AndroidResourceTranslator"`     | Yes      | ``                         |
+| **openrouter_site_name**     | Your site name for OpenRouter rankings. Used to identify your application in OpenRouter analytics.                                                                                                                                            | `"AndroidResourceTranslatorAction"`                                    | Yes      | `""`                                                        |
 | **openrouter_send_site_info** | Send site URL and name to OpenRouter for rankings. Set to `"false"` to disable.                                                                                                                                                               | `"true"`                                                               | Yes      | `"true"` or `"false"`                                                  |
 | **project_context**          | Additional project context to include in translation prompts.                                                                                                                                                                                 | `""`                                                                   | Yes      | `"Android launcher application"`                                       |
 | **ignore_folders**           | Comma-separated list of folder names to ignore during resource scanning. If empty, .gitignore file will be used instead.                                                                                                                     | `""`                                                                   | Yes      | `"build,temp,cache"`                                                   |

@@ -133,7 +133,7 @@ python app/AndroidResourceTranslator.py <path> [options]
 **OpenRouter (Default):**
 
 - `google/gemini-2.5-flash-preview-09-2025` - Google Gemini 2.5 Flash (default, cost-effective)
-- `google/gemini-2.0-flash-exp` - Google Gemini 2.0 Flash
+- `google/gemini-2.5-flash` - Google Gemini 2.0 Flash
 - `anthropic/claude-3.5-sonnet` - Anthropic Claude 3.5 Sonnet
 - `meta-llama/llama-3.1-405b-instruct` - Meta Llama 3.1 405B
 - `openai/gpt-4o` - OpenAI GPT-4o (via OpenRouter)

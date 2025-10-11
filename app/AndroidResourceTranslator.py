@@ -844,58 +844,6 @@ def translate_plural_text(
 
 
 # ------------------------------------------------------------------------------
-# Translation Validation
-# ------------------------------------------------------------------------------
-
-
-def validate_translation(
-    source_text: str,
-    current_translation: str,
-    target_language: str,
-    is_plural: bool = False,
-) -> str:
-    """
-    Prompt the user to validate and optionally correct a translation.
-
-    This function provides an interactive way for users to review translations
-    before they are applied. It displays the source text and its translation,
-    then asks the user if they accept it or want to provide a correction.
-
-    The function is particularly useful for:
-    - Reviewing automatically generated translations
-    - Correcting any mistakes or awkward phrasing
-
-    Args:
-        source_text: The original text in the source language
-        current_translation: The translated text to validate
-        target_language: The language code of the translation
-        is_plural: Whether this is a plural resource (for display purposes)
-
-    Returns:
-        The validated translation (either the original or a corrected version)
-    """
-    print("\n----- Validate Translation -----")
-
-    # Display appropriate resource type label
-    resource_type = "Plural Resource" if is_plural else "String Resource"
-
-    # Show the source and translated text to the user
-    print(f"Source {resource_type}: {source_text}")
-    print(f"Current Translation in {target_language}: {current_translation}")
-
-    # Ask the user if they accept the translation
-    response = input("Do you accept this translation? (y/n): ").strip().lower()
-
-    if response == "y":
-        # User accepts the translation as-is
-        return current_translation
-    else:
-        # User wants to provide a correction
-        new_trans = input("Enter the corrected translation: ").strip()
-        return new_trans
-
-
-# ------------------------------------------------------------------------------
 # Auto-Translation Process
 # ------------------------------------------------------------------------------
 
@@ -907,7 +855,6 @@ def _translate_missing_strings(
     lang: str,
     llm_config: LLMConfig,
     project_context: str,
-    validate_translations: bool,
 ) -> List[Dict]:
     """
     Helper function to translate missing strings for a resource file.
@@ -934,12 +881,6 @@ def _translate_missing_strings(
                 f"Translated string '{key}' to {lang}: '{source_text}' -> '{translated}'"
             )
 
-            # Validate if required
-            if validate_translations:
-                translated = validate_translation(
-                    source_text, translated, target_language=lang
-                )
-
             # Update the resource
             res.strings[key] = translated
             res.modified = True
@@ -965,7 +906,6 @@ def _translate_missing_plurals(
     lang: str,
     llm_config: LLMConfig,
     project_context: str,
-    validate_translations: bool,
 ) -> List[Dict]:
     """
     Helper function to translate missing plurals for a resource file.
@@ -992,20 +932,6 @@ def _translate_missing_plurals(
             logger.info(
                 f"Translated plural group '{plural_name}' for language '{lang}': {res.plurals[plural_name]}"
             )
-
-            # Validate if required
-            if validate_translations:
-                for plural_key in generated_plural:
-                    if plural_key in current_map:
-                        continue
-                    src_text = default_map.get(plural_key, default_map.get("other", ""))
-                    validated = validate_translation(
-                        src_text,
-                        res.plurals[plural_name][plural_key],
-                        target_language=lang,
-                        is_plural=True,
-                    )
-                    res.plurals[plural_name][plural_key] = validated
 
             # Add to results
             results.append(
@@ -1090,7 +1016,6 @@ def auto_translate_resources(
     modules: Dict[str, AndroidModule],
     llm_config: LLMConfig,
     project_context: str,
-    validate_translations: bool = False,
 ) -> dict:
     """
     For each non-default language resource, auto-translate missing strings and plural items.
@@ -1154,7 +1079,6 @@ def auto_translate_resources(
                         lang,
                         llm_config,
                         project_context,
-                        validate_translations,
                     )
                     translation_log[module.name][lang]["strings"].extend(string_results)
                     total_translated += len(string_results)
@@ -1167,7 +1091,6 @@ def auto_translate_resources(
                         lang,
                         llm_config,
                         project_context,
-                        validate_translations,
                     )
                     translation_log[module.name][lang]["plurals"].extend(plural_results)
                     total_translated += sum(
@@ -1434,8 +1357,6 @@ def main() -> None:
             else []
         )
         dry_run = os.environ.get("INPUT_DRY_RUN", "false").lower() == "true"
-        # No manual validation on GitHub; force it off.
-        validate_translations = False
         log_trace = os.environ.get("INPUT_LOG_TRACE", "false").lower() == "true"
 
         # LLM Provider configuration
@@ -1479,7 +1400,7 @@ def main() -> None:
         print(
             "Running with parameters from environment variables. "
             f"Resources Paths: {resources_paths}, Dry Run: {dry_run}, "
-            f"Validate Translations: {validate_translations}, Log Trace: {log_trace}, "
+            f"Log Trace: {log_trace}, "
             f"LLM Provider: {llm_provider}, Model: {model}, "
             f"Project Context: {project_context}, Ignore Folders: {ignore_folders}"
         )
@@ -1496,12 +1417,6 @@ def main() -> None:
             "--dry-run",
             action="store_true",
             help="Run in dry-run mode (only report missing translations without translating)",
-        )
-        parser.add_argument(
-            "-v",
-            "--validate-translations",
-            action="store_true",
-            help="Enable manual validation of translations before saving",
         )
         parser.add_argument(
             "-l",
@@ -1584,7 +1499,6 @@ def main() -> None:
 
         resources_paths = args.resources_paths
         dry_run = args.dry_run
-        validate_translations = args.validate_translations
         log_trace = args.log_trace
 
         # LLM Provider configuration
@@ -1612,7 +1526,7 @@ def main() -> None:
         print(
             "Running with command-line parameters. "
             f"Resources Paths: {resources_paths}, Dry Run: {dry_run}, "
-            f"Validate Translations: {validate_translations}, Log Trace: {log_trace}, "
+            f"Log Trace: {log_trace}, "
             f"LLM Provider: {llm_provider}, Model: {model}, "
             f"Project Context: {project_context}, Ignore Folders: {ignore_folders}"
         )
@@ -1714,7 +1628,6 @@ def main() -> None:
             merged_modules,
             llm_config,
             project_context,
-            validate_translations=validate_translations,
         )
 
     # Whether or not auto-translation was performed, still check for missing translations.

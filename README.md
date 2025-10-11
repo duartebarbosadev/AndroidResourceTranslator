@@ -75,7 +75,6 @@ jobs:
           # (Optional inputs)
           #resources_paths: "./app/src/main/res"  # default with no value will search entire project automatically
           #log_trace: "true" #default is false
-          #validate_translations: "false"
           #ignore_folders: "build" # Default will follow .gitignore
           #project_context: "Your project context here" # (Default is no context)
           #openrouter_send_site_info: "false" # Set to false to disable sending site info to OpenRouter
@@ -113,7 +112,7 @@ To run the translator on your local machine, execute:
 python AndroidResourceTranslator.py /path/to/your/android/project
 ```
 
-You can also pass additional parameters like `--project-context`, `--validate-translations`, or `--dry-run` (to only check for missing translations without translating) as needed.
+You can also pass additional parameters like `--project-context` or `--dry-run` (to only check for missing translations without translating) as needed.
 
 ## Configuration
 
@@ -123,7 +122,6 @@ The action supports the following inputs:
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
 | **resources_paths**          | Paths to the Android resource directories. Typically includes directories such as `app/src/main/res`, `library/src/main/res`, etc. If not provided, this action will search throughout the entire project folder.                         | `${{ github.workspace }}`                                              | Yes      | `./app/src/main/res, ./library/src/main/res, ./feature/src/main/res`   |
 | **dry_run**                  | Run in dry-run mode (only report missing translations without translating). Set to `"true"` to enable dry-run mode.                                                                                                                           | `"false"`                                                              | Yes      | `"true"` or `"false"`                                                  |
-| **validate_translations**    | Enable manual validation of translations before saving. When enabled, you will be prompted to confirm each translation.                                                                                                                   | `"false"`                                                              | Yes      | `"true"` or `"false"`                                                  |
 | **log_trace**                | Enable detailed logging. Use `"true"` for verbose output.                                                                                                                                                                                     | `"false"`                                                              | Yes      | `"true"`                                                               |
 | **llm_provider**             | LLM provider to use for translation. Options are `"openai"` or `"openrouter"`.                                                                                                                                                                 | `"openrouter"`                                                             | Yes      | `"openai"`, `"openrouter"`                                              |
 | **model**                    | Model to use for translation. For OpenAI: `gpt-4o-mini`, `gpt-4o`, etc. For OpenRouter: `google/gemini-2.5-flash-preview-09-2025` (recommended), `anthropic/claude-3.5-sonnet`, etc.                                                                                     | `"google/gemini-2.5-flash-preview-09-2025"`                                                        | Yes      | `"google/gemini-2.5-flash-preview-09-2025"`, `"anthropic/claude-3.5-sonnet"`         |

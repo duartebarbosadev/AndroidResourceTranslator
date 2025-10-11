@@ -476,7 +476,6 @@ class TestAutoTranslation(unittest.TestCase):
             self.modules,
             llm_config=llm_config,
             project_context="Test project",
-            validate_translations=False,
         )
 
         # Verify translation calls

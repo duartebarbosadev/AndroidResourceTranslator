@@ -77,9 +77,7 @@ python app/AndroidResourceTranslator.py sample_project/
 Use OpenAI instead of the default OpenRouter:
 
 ```bash
-python app/AndroidResourceTranslator.py sample_project/ \
-    --llm-provider openai \
-    --model gpt-4o-mini
+python app/AndroidResourceTranslator.py sample_project/ --llm-provider openai --model gpt-4o-mini
 ```
 
 **Test 4: With Project Context**
@@ -87,8 +85,7 @@ python app/AndroidResourceTranslator.py sample_project/ \
 Provide additional context for better translations:
 
 ```bash
-python app/AndroidResourceTranslator.py sample_project/ \
-    --project-context "A shopping list mobile application for groceries and household items"
+python app/AndroidResourceTranslator.py sample_project/ --project-context "A shopping list mobile application for groceries and household items"
 ```
 
 **Test 5: With Detailed Logging**
@@ -96,8 +93,7 @@ python app/AndroidResourceTranslator.py sample_project/ \
 Enable verbose output for debugging:
 
 ```bash
-python app/AndroidResourceTranslator.py sample_project/ \
-    --log-trace
+python app/AndroidResourceTranslator.py sample_project/ --log-trace
 ```
 
 ## Command Reference

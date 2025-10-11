@@ -2,3 +2,4 @@ openai>=1.61.1
 lxml>=4.9.1
 pathspec>=0.12.1
 babel>=2.17.0
+ruff>=0.8.0

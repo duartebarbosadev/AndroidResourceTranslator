@@ -2,7 +2,7 @@
 
 *WIP*
 
-**Android Resource Translator** scans your `strings.xml` files for missing translations and automatically translates them using OpenAI’s language models.
+**Android Resource Translator** scans your `strings.xml` files for missing translations and automatically translates them using AI language models (OpenAI or OpenRouter).
 
 <!--[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-enabled-brightgreen)](https://github.com/)-->
 
@@ -11,13 +11,25 @@
 
 ## GitHub Actions Workflow Examples
 
-### Simple Example
+### Simple Example (Using OpenRouter with Gemini - Default)
 
-If you want to quickly try out the action with minimal configuration, add this step to your workflow:
+If you want to quickly try out the action with minimal configuration, add this step to your workflow. This uses the default provider (OpenRouter) and model (Gemini google/gemini-2.5-flash-preview-09-2025):
 
 ```yaml
 - name: Run Android Resource Translator
   uses: duartebarbosadev/AndroidResourceTranslator@v1
+  env:
+    OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+```
+
+### Simple Example (Using OpenAI)
+
+```yaml
+- name: Run Android Resource Translator
+  uses: duartebarbosadev/AndroidResourceTranslator@v1
+  with:
+    llm_provider: openai
+    model: gpt-4o-mini
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
@@ -57,16 +69,18 @@ jobs:
       - name: Translate strings.xml to supported languages
         id: translate
         uses: duartebarbosadev/AndroidResourceTranslator@v1
-        # (Optional inputs)
-        #with:
-          #resources_paths: "./app/src/main/res"  # default will search entire project
-          #openai_model: "gpt-3.5-turbo" # default is 4o-mini
-          #log_trace: "true" #default is true
+        with:
+          llm_provider: openrouter
+          model: google/gemini-2.5-flash-preview-09-2025
+          # (Optional inputs)
+          #resources_paths: "./app/src/main/res"  # default with no value will search entire project automatically
+          #log_trace: "true" #default is false
           #validate_translations: "false"
           #ignore_folders: "build" # Default will follow .gitignore
           #project_context: "Your project context here" # (Default is no context)
+          #openrouter_send_site_info: "false" # Set to false to disable sending site info to OpenRouter
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
@@ -88,37 +102,45 @@ jobs:
 
 ### ⚠️ API Usage and Pricing Considerations
 
-Please note that each time the action runs, it will process **all** missing translations from the beginning. This can impact your OpenAI API usage and associated costs, especially for large projects with many strings or frequent commits.
+Please note that each time the action runs, it will process **all** missing translations. This can impact your API usage and associated costs, especially for large projects with many strings or frequent commits. Meaning that you should accept this action PR's as soon as possible to avoid repeating runs.
 
-**Best practices to manage API costs:**
-- Configure workflow triggers carefully as shown in the advanced example (`paths: '**/values/strings.xml'`) to only run when string resources actually change
-- Keep your repository up-to-date with translations to minimize the number of strings that need processing
-- Monitor your OpenAI API usage regularly to avoid unexpected charges
-
+We recommend the model google/gemini-2.5-flash-preview-09-2025 as it got the best results in our testing and is not as expensive as the bigger models.
 ## Local Execution
 
 To run the translator on your local machine, execute:
 
 ```bash
-python AndroidResourceTranslator.py /path/to/your/android/project --auto-translate
+python AndroidResourceTranslator.py /path/to/your/android/project
 ```
 
-You can also pass additional parameters like `--project-context` and `--validate-translations` as needed.
+You can also pass additional parameters like `--project-context`, `--validate-translations`, or `--dry-run` (to only check for missing translations without translating) as needed.
 
 ## Configuration
 
 The action supports the following inputs:
 
-| Input                   | Description                                                                                                                                                                                                                                    | Default Value                  | Optional | Example                                                                |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | -------- | ---------------------------------------------------------------------- |
-| **resources_paths**     | Paths to the Android resource directories. Typically includes directories such as `app/src/main/res`, `library/src/main/res`, etc. If not provided, this action will search throughout the entire project folder.                         | `${{ github.workspace }}`      | Yes      | `./app/src/main/res, ./library/src/main/res, ./feature/src/main/res`   |
-| **auto_translate**      | Automatically translate missing resources. Set it to `false` to disable auto-translation.                                                                                                                                                        | `"false"`                      | Yes      | `"true"` or `"false"`                                                  |
-| **validate_translations** | Enable manual validation of OpenAI translations before saving. When enabled, you will be prompted to confirm each translation.                                                                                                                   | `"false"`                      | Yes      | `"true"` or `"false"`                                                  |
-| **log_trace**           | Enable detailed logging. Use `"true"` for verbose output.                                                                                                                                                                                     | `"false"`                      | Yes      | `"true"`                                                               |
-| **openai_model**        | Specify the OpenAI model to use for translation. We advise using `gpt-4o-mini`.                                                                                                                                                                 | `"gpt-4o-mini"`                | Yes      | `"gpt-3.5-turbo"`, `"gpt-4o"`                                            |
-| **project_context**     | Additional project context to include in translation prompts.                                                                                                                                                                                 | `""`                           | Yes      | `"Android launcher application"`                                       |
-| **ignore_folders**      | Comma-separated list of folder names to ignore during resource scanning. If empty, .gitignore file will be used instead.                                                                                                                     | `""`                           | Yes      | `"build,temp,cache"`                                                   |
-| **openai_api_key**      | OpenAI API key to use for translation.                                                                                                                                                                                                         | N/A                            | Yes      |                                                                        |
+| Input                        | Description                                                                                                                                                                                                                                    | Default Value                                                          | Optional | Example                                                                |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
+| **resources_paths**          | Paths to the Android resource directories. Typically includes directories such as `app/src/main/res`, `library/src/main/res`, etc. If not provided, this action will search throughout the entire project folder.                         | `${{ github.workspace }}`                                              | Yes      | `./app/src/main/res, ./library/src/main/res, ./feature/src/main/res`   |
+| **dry_run**                  | Run in dry-run mode (only report missing translations without translating). Set to `"true"` to enable dry-run mode.                                                                                                                           | `"false"`                                                              | Yes      | `"true"` or `"false"`                                                  |
+| **validate_translations**    | Enable manual validation of translations before saving. When enabled, you will be prompted to confirm each translation.                                                                                                                   | `"false"`                                                              | Yes      | `"true"` or `"false"`                                                  |
+| **log_trace**                | Enable detailed logging. Use `"true"` for verbose output.                                                                                                                                                                                     | `"false"`                                                              | Yes      | `"true"`                                                               |
+| **llm_provider**             | LLM provider to use for translation. Options are `"openai"` or `"openrouter"`.                                                                                                                                                                 | `"openrouter"`                                                             | Yes      | `"openai"`, `"openrouter"`                                              |
+| **model**                    | Model to use for translation. For OpenAI: `gpt-4o-mini`, `gpt-4o`, etc. For OpenRouter: `google/gemini-2.5-flash-preview-09-2025` (recommended), `anthropic/claude-3.5-sonnet`, etc.                                                                                     | `"google/gemini-2.5-flash-preview-09-2025"`                                                        | Yes      | `"google/gemini-2.5-flash-preview-09-2025"`, `"anthropic/claude-3.5-sonnet"`         |
+| **openrouter_site_url**      | Your site URL for OpenRouter rankings. Used to identify your application in OpenRouter analytics.                                                                                                                                             | `"https://github.com/duartebarbosadev/AndroidResourceTranslator"`     | Yes      | ``                         |
+| **openrouter_site_name**     | Your site name for OpenRouter rankings. Used to identify your application in OpenRouter analytics.                                                                                                                                            | `"AndroidResourceTranslatorAction"`                                    | Yes      | `""`                                                        |
+| **openrouter_send_site_info** | Send site URL and name to OpenRouter for rankings. Set to `"false"` to disable.                                                                                                                                                               | `"true"`                                                               | Yes      | `"true"` or `"false"`                                                  |
+| **project_context**          | Additional project context to include in translation prompts.                                                                                                                                                                                 | `""`                                                                   | Yes      | `"Android launcher application"`                                       |
+| **ignore_folders**           | Comma-separated list of folder names to ignore during resource scanning. If empty, .gitignore file will be used instead.                                                                                                                     | `""`                                                                   | Yes      | `"build,temp,cache"`                                                   |
+
+### Environment Variables (API Keys)
+
+Set these as repository secrets and pass them via `env:` in your workflow:
+
+| Variable                | Description                                      | Required For                    |
+| ----------------------- | ------------------------------------------------ | ------------------------------- |
+| **OPENAI_API_KEY**      | OpenAI API key                                   | OpenAI provider                 |
+| **OPENROUTER_API_KEY**  | OpenRouter API key                               | OpenRouter provider             |
 
 ## Translation Report Output
 

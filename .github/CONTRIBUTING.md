@@ -18,26 +18,26 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 ## Ways to Contribute
 
-### 🐛 Report Bugs
+### Report Bugs
 Found a bug? [Open an issue](https://github.com/duartebarbosadev/AndroidResourceTranslator/issues/new) with:
 - Clear description of the problem
 - Steps to reproduce
 - Expected vs actual behavior
 - Your environment (OS, Python version, etc.)
 
-### 💡 Suggest Features
+### Suggest Features
 Have an idea? [Open an issue](https://github.com/duartebarbosadev/AndroidResourceTranslator/issues/new) describing:
 - The problem you're trying to solve
 - Your proposed solution
 - Any alternatives you've considered
 
-### 🔧 Contribute Code
+### Contribute Code
 Fix bugs, implement features, or improve performance by submitting pull requests.
 
-### 📚 Improve Documentation
+### Improve Documentation
 Help make our docs better by fixing typos, clarifying explanations, or adding examples.
 
-### 🌟 Showcase Your Project
+### Showcase Your Project
 Using Android Resource Translator? Add your project to the "Projects Using Android Resource Translator" section in the [README.md](../README.md).
 
 ## Development Setup
@@ -72,7 +72,7 @@ pip install -r requirements.txt
 
 You'll need API keys for testing translation functionality.
 
-**Option 1: OpenRouter (Recommended)**
+**Option 1: OpenRouter**
 ```bash
 export OPENROUTER_API_KEY='your-openrouter-api-key-here'
 ```

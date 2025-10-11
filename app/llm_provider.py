@@ -43,22 +43,42 @@ TRANSLATE_STRING_TOOL = {
 
 # Tool schema for translating plural resources
 # Returns a dictionary mapping quantity keys to translated strings
+# Note: We explicitly define all 6 Android plural keys as optional properties
+# to help the model understand what to return without requiring strict mode
 TRANSLATE_PLURAL_TOOL = {
     "type": "function",
     "function": {
         "name": "translate_plural",
-        "description": "Translate Android plural resources with all required quantity forms for the target language",
-        "strict": True,
+        "description": "Translate Android plural resources with all appropriate quantity forms for the target language",
         "parameters": {
             "type": "object",
             "properties": {
-                "translations": {
-                    "type": "object",
-                    "description": "Plural translations keyed by quantity (zero, one, two, few, many, other)",
-                    "additionalProperties": {"type": "string"},
+                "one": {
+                    "type": "string",
+                    "description": "Translation for singular quantity (e.g., '1 day')"
+                },
+                "other": {
+                    "type": "string",
+                    "description": "Translation for other quantities (e.g., '%d days') - this is the default fallback"
+                },
+                "zero": {
+                    "type": "string",
+                    "description": "Translation for zero quantity if the target language requires it"
+                },
+                "two": {
+                    "type": "string",
+                    "description": "Translation for dual quantity if the target language requires it"
+                },
+                "few": {
+                    "type": "string",
+                    "description": "Translation for few quantity if the target language requires it (e.g., Slavic languages)"
+                },
+                "many": {
+                    "type": "string",
+                    "description": "Translation for many quantity if the target language requires it (e.g., Slavic languages)"
                 }
             },
-            "required": ["translations"],
+            "required": [],
             "additionalProperties": False,
         },
     },
@@ -258,6 +278,8 @@ class LLMClient:
                 function_name = tool_call.function.name
                 arguments_str = tool_call.function.arguments
 
+                logger.debug(f"Raw function arguments string: {arguments_str}")
+
                 # Parse the JSON arguments
                 import json
 
@@ -266,6 +288,7 @@ class LLMClient:
                 logger.debug(
                     f"Function called: {function_name} with {len(arguments)} parameters"
                 )
+                logger.debug(f"Parsed arguments: {arguments}")
 
                 return arguments
 
@@ -368,6 +391,28 @@ def translate_plural_with_llm(
         temperature=0,  # Deterministic output for consistent translations
     )
 
-    # Extract translations dictionary from function call result
-    # The schema guarantees this will always have a "translations" key with a dict value
-    return result["translations"]
+    # Extract translations from function call result
+    # The result now directly contains the plural keys (one, other, zero, two, few, many)
+    logger.debug(f"Received plural translation result keys: {list(result.keys())}")
+    logger.debug(f"Full plural translation result: {result}")
+
+    # Validate that at least one plural key was returned
+    if not result:
+        raise ValueError("LLM returned empty result for plural resource translation")
+
+    # Validate that at least the "other" key is present (Android's mandatory fallback)
+    if "other" not in result:
+        logger.warning(
+            f"LLM did not provide 'other' key for plural translation. "
+            f"Provided keys: {list(result.keys())}. "
+            f"'other' is mandatory in Android as a fallback."
+        )
+        # If there's only one key, use it as 'other' fallback
+        if len(result) == 1:
+            key = list(result.keys())[0]
+            result["other"] = result[key]
+            logger.info(f"Using '{key}' value as 'other' fallback")
+        elif len(result) == 0:
+            raise ValueError("LLM returned no plural translations")
+
+    return result

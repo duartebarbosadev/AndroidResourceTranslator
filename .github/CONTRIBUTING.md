@@ -103,18 +103,17 @@ The [`sample_project/`](../sample_project/) directory contains a realistic Andro
 
 **Quick Test - Dry Run:**
 ```bash
-python app/AndroidResourceTranslator.py sample_project/
+python app/AndroidResourceTranslator.py sample_project/ --dry-run
 ```
 
-**Test Auto-translation:**
+**Test Translation:**
 ```bash
-python app/AndroidResourceTranslator.py sample_project/ --auto-translate
+python app/AndroidResourceTranslator.py sample_project/
 ```
 
 **Test with OpenRouter (Gemini):**
 ```bash
 python app/AndroidResourceTranslator.py sample_project/ \
-    --auto-translate \
     --llm-provider openrouter \
     --model google/gemini-2.5-flash-preview-09-2025
 ```
@@ -122,7 +121,6 @@ python app/AndroidResourceTranslator.py sample_project/ \
 **Test with Project Context:**
 ```bash
 python app/AndroidResourceTranslator.py sample_project/ \
-    --auto-translate \
     --project-context "A shopping list mobile application"
 ```
 

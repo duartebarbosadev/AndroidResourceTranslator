@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Android Resource Translation Checker & Auto-Translator
+Android Resource Auto-Translator
 
 This script scans Android resource files (strings.xml) for string and plural resources,
 reports missing translations, and can automatically translate missing entries using OpenAI.
@@ -1433,9 +1433,7 @@ def main() -> None:
             if resources_paths_input
             else []
         )
-        auto_translate = (
-            os.environ.get("INPUT_AUTO_TRANSLATE", "false").lower() == "true"
-        )
+        dry_run = os.environ.get("INPUT_DRY_RUN", "false").lower() == "true"
         # No manual validation on GitHub; force it off.
         validate_translations = False
         log_trace = os.environ.get("INPUT_LOG_TRACE", "false").lower() == "true"
@@ -1480,7 +1478,7 @@ def main() -> None:
 
         print(
             "Running with parameters from environment variables. "
-            f"Resources Paths: {resources_paths}, Auto Translate: {auto_translate}, "
+            f"Resources Paths: {resources_paths}, Dry Run: {dry_run}, "
             f"Validate Translations: {validate_translations}, Log Trace: {log_trace}, "
             f"LLM Provider: {llm_provider}, Model: {model}, "
             f"Project Context: {project_context}, Ignore Folders: {ignore_folders}"
@@ -1494,10 +1492,10 @@ def main() -> None:
             help="Paths to Android project directories with resource files",
         )
         parser.add_argument(
-            "-a",
-            "--auto-translate",
+            "-d",
+            "--dry-run",
             action="store_true",
-            help="Automatically translate missing resources using LLM API",
+            help="Run in dry-run mode (only report missing translations without translating)",
         )
         parser.add_argument(
             "-v",
@@ -1585,7 +1583,7 @@ def main() -> None:
         args = parser.parse_args()
 
         resources_paths = args.resources_paths
-        auto_translate = args.auto_translate
+        dry_run = args.dry_run
         validate_translations = args.validate_translations
         log_trace = args.log_trace
 
@@ -1595,10 +1593,7 @@ def main() -> None:
 
         # API Keys - determine based on provider (strict matching)
         if llm_provider == "openrouter":
-            api_key = (
-                args.openrouter_api_key
-                or os.environ.get("OPENROUTER_API_KEY")
-            )
+            api_key = args.openrouter_api_key or os.environ.get("OPENROUTER_API_KEY")
         else:
             api_key = args.openai_api_key or os.environ.get("OPENAI_API_KEY")
 
@@ -1616,7 +1611,7 @@ def main() -> None:
         # Don't print args because it will come with the API KEY
         print(
             "Running with command-line parameters. "
-            f"Resources Paths: {resources_paths}, Auto Translate: {auto_translate}, "
+            f"Resources Paths: {resources_paths}, Dry Run: {dry_run}, "
             f"Validate Translations: {validate_translations}, Log Trace: {log_trace}, "
             f"LLM Provider: {llm_provider}, Model: {model}, "
             f"Project Context: {project_context}, Ignore Folders: {ignore_folders}"
@@ -1624,29 +1619,35 @@ def main() -> None:
 
     configure_logging(log_trace)
 
-    # Early validation: Check API key if auto-translation is enabled
-    if auto_translate and not api_key:
-        env_var_name = "OPENROUTER_API_KEY" if llm_provider == "openrouter" else "OPENAI_API_KEY"
-        print(f"\n========================================")
-        print(f"ERROR: API key not found!")
-        print(f"========================================")
-        print(f"Auto-translation is enabled but no API key was provided.")
-        print(f"\nTo fix this:")
-        print(f"\n1. For GitHub Actions, add {env_var_name} to your repository secrets:")
-        print(f"   - Go to Settings > Secrets and variables > Actions")
+    # Early validation: Check API key if not in dry-run mode
+    if not dry_run and not api_key:
+        env_var_name = (
+            "OPENROUTER_API_KEY" if llm_provider == "openrouter" else "OPENAI_API_KEY"
+        )
+        print("\n========================================")
+        print("ERROR: API key not found!")
+        print("========================================")
+        print(
+            "Translation is enabled (not in dry-run mode) but no API key was provided."
+        )
+        print("\nTo fix this:")
+        print(
+            f"\n1. For GitHub Actions, add {env_var_name} to your repository secrets:"
+        )
+        print("   - Go to Settings > Secrets and variables > Actions")
         print(f"   - Add a new secret named: {env_var_name}")
-        print(f"   - Pass it via env in your workflow:")
-        print(f"     env:")
+        print("   - Pass it via env in your workflow:")
+        print("     env:")
         print(f"       {env_var_name}: ${{{{ secrets.{env_var_name} }}}}")
-        print(f"\n2. For local execution, set the environment variable:")
+        print("\n2. For local execution, set the environment variable:")
         print(f"   export {env_var_name}=your_key_here")
-        print(f"\n3. Or pass it as a command-line argument:")
+        print("\n3. Or pass it as a command-line argument:")
         print(f"   --{llm_provider}-api-key YOUR_KEY")
         if llm_provider == "openrouter":
-            print(f"\nGet your API key at: https://openrouter.ai/keys")
+            print("\nGet your API key at: https://openrouter.ai/keys")
         else:
-            print(f"\nGet your API key at: https://platform.openai.com/api-keys")
-        print(f"========================================\n")
+            print("\nGet your API key at: https://platform.openai.com/api-keys")
+        print("========================================\n")
         sys.exit(1)
 
     if not resources_paths:
@@ -1688,8 +1689,8 @@ def main() -> None:
             module.print_resources()
 
     translation_log = {}
-    # If auto_translate is enabled, run the auto-translation process.
-    if auto_translate:
+    # If not in dry-run mode, run the translation process.
+    if not dry_run:
         # Create LLM configuration
         try:
             llm_config = LLMConfig(
@@ -1708,9 +1709,7 @@ def main() -> None:
             logger.error(f"Error creating LLM configuration: {e}")
             sys.exit(1)
 
-        logger.info(
-            f"Starting auto-translation using {llm_provider} with model {model}"
-        )
+        logger.info(f"Starting translation using {llm_provider} with model {model}")
         translation_log = auto_translate_resources(
             merged_modules,
             llm_config,
@@ -1733,7 +1732,7 @@ def main() -> None:
             print(report_output, file=f)
             print(delimiter, file=f)
     else:
-        if auto_translate:
+        if not dry_run:
             print("\nTranslation Report:")
             print(report_output)
 

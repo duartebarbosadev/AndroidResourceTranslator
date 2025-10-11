@@ -55,28 +55,28 @@ TRANSLATE_PLURAL_TOOL = {
             "properties": {
                 "one": {
                     "type": "string",
-                    "description": "Translation for singular quantity (e.g., '1 day')"
+                    "description": "Translation for singular quantity (e.g., '1 day')",
                 },
                 "other": {
                     "type": "string",
-                    "description": "Translation for other quantities (e.g., '%d days') - this is the default fallback"
+                    "description": "Translation for other quantities (e.g., '%d days') - this is the default fallback",
                 },
                 "zero": {
                     "type": "string",
-                    "description": "Translation for zero quantity if the target language requires it"
+                    "description": "Translation for zero quantity if the target language requires it",
                 },
                 "two": {
                     "type": "string",
-                    "description": "Translation for dual quantity if the target language requires it"
+                    "description": "Translation for dual quantity if the target language requires it",
                 },
                 "few": {
                     "type": "string",
-                    "description": "Translation for few quantity if the target language requires it (e.g., Slavic languages)"
+                    "description": "Translation for few quantity if the target language requires it (e.g., Slavic languages)",
                 },
                 "many": {
                     "type": "string",
-                    "description": "Translation for many quantity if the target language requires it (e.g., Slavic languages)"
-                }
+                    "description": "Translation for many quantity if the target language requires it (e.g., Slavic languages)",
+                },
             },
             "required": [],
             "additionalProperties": False,
@@ -193,7 +193,10 @@ class LLMClient:
         Returns:
             Dictionary of extra headers to include in requests
         """
-        if self.config.provider == LLMProvider.OPENROUTER and self.config.send_site_info:
+        if (
+            self.config.provider == LLMProvider.OPENROUTER
+            and self.config.send_site_info
+        ):
             headers = {}
 
             if self.config.site_url:

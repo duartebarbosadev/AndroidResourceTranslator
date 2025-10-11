@@ -116,9 +116,7 @@ class TestResourceFindingAndTranslation(TestIntegration):
 
         # Step 3: Perform auto-translation
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI,
-            api_key="fake_api_key",
-            model="fake_model"
+            provider=LLMProvider.OPENAI, api_key="fake_api_key", model="fake_model"
         )
 
         with patch("AndroidResourceTranslator.update_xml_file"):

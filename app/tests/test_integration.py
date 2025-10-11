@@ -124,7 +124,6 @@ class TestResourceFindingAndTranslation(TestIntegration):
                 modules,
                 llm_config=llm_config,
                 project_context="Test project",
-                validate_translations=False,
             )
 
         # Verify translator was called for missing string

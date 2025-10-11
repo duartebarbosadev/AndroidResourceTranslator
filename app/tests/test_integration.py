@@ -77,11 +77,11 @@ class TestResourceFindingAndTranslation(TestIntegration):
     </plurals>
 </resources>""")
 
-    @patch("AndroidResourceTranslator.translate_text")
-    def test_find_and_translate_workflow(self, mock_translate_text):
+    @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
+    def test_find_and_translate_workflow(self, mock_translate_batch):
         """Test the complete workflow of finding and translating resources."""
         # Configure mock translator
-        mock_translate_text.return_value = "Bienvenido"
+        mock_translate_batch.return_value = {"welcome": "Bienvenido"}
 
         # Step 1: Find resources
         modules = find_resource_files(self.temp_dir.name)
@@ -127,12 +127,9 @@ class TestResourceFindingAndTranslation(TestIntegration):
             )
 
         # Verify translator was called for missing string
-        mock_translate_text.assert_called_once_with(
-            "Welcome",
-            target_language="es",
-            llm_config=llm_config,
-            project_context="Test project",
-        )
+        mock_translate_batch.assert_called_once()
+        batch_kwargs = mock_translate_batch.call_args.kwargs
+        self.assertIn("welcome", batch_kwargs.get("strings_dict", {}))
 
         # Verify resource was updated
         self.assertIn("welcome", es_res.strings)

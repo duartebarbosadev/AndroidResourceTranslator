@@ -319,6 +319,51 @@ class TestResourceParsing(TestResourceParser):
         self.assertEqual(resource_file.plurals["num_items"]["one"], "%d item")
         self.assertEqual(resource_file.plurals["num_items"]["other"], "%d items")
 
+    def test_parsing_preserves_inline_markup(self):
+        """Ensure parsing retains inline HTML markup when present."""
+        xml_path = os.path.join(self.temp_dir, "values", "strings.xml")
+        content = """<resources>
+    <string name="html_link">Visit our <a href=\"https://example.com\">website</a> for more info</string>
+</resources>"""
+        self.create_strings_xml(xml_path, content=content)
+
+        resource_file = AndroidResourceFile(Path(xml_path), "default")
+
+        expected = 'Visit our <a href="https://example.com">website</a> for more info'
+        self.assertEqual(resource_file.strings["html_link"], expected)
+
+    def test_update_xml_file_preserves_markup(self):
+        """Ensure update_xml_file writes strings with markup without escaping."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            xml_path = Path(tmp_dir) / "strings.xml"
+            original_content = """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="html_link">Visit our <a href=\"https://example.com\">website</a> for more info</string>
+</resources>"""
+            with open(xml_path, "w", encoding="utf-8") as f:
+                f.write(original_content)
+
+            res = AndroidResourceFile(xml_path, "pt-rPT")
+            res.strings["html_link"] = (
+                'Visite o nosso <a href="https://example.com">website</a> para mais informações'
+            )
+            res.modified = True
+
+            update_xml_file(res)
+
+            with open(xml_path, encoding="utf-8") as f:
+                updated_content = f.read()
+
+            self.assertIn(
+                '<a href="https://example.com">website</a>',
+                updated_content,
+                "HTML markup should be preserved in output",
+            )
+            self.assertIn(
+                'Visite o nosso <a href="https://example.com">website</a> para mais informações',
+                updated_content,
+            )
+
     def test_update_xml_file(self):
         """Test updating an XML file with new string entries."""
         with tempfile.TemporaryDirectory() as tmp_dir:

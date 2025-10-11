@@ -84,6 +84,88 @@ TRANSLATE_PLURAL_TOOL = {
     },
 }
 
+# Tool schema for batch translating multiple strings at once
+# Uses an array of {key, translation} objects instead of a dynamic dictionary
+# This avoids issues with additionalProperties in some LLM providers
+TRANSLATE_STRINGS_BATCH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "translate_strings_batch",
+        "description": "Translate all provided Android UI strings to the target language. Return an array containing ALL strings with their translations.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "translations": {
+                    "type": "array",
+                    "description": "Array of translation objects, one for each input string",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "key": {
+                                "type": "string",
+                                "description": "The string resource key from the input"
+                            },
+                            "translation": {
+                                "type": "string",
+                                "description": "The translated text for this key"
+                            }
+                        },
+                        "required": ["key", "translation"],
+                        "additionalProperties": False
+                    }
+                }
+            },
+            "required": ["translations"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+# Tool schema for batch translating multiple plural resources at once
+# Uses an array structure to avoid issues with dynamic object keys
+TRANSLATE_PLURALS_BATCH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "translate_plurals_batch",
+        "description": "Translate multiple Android plural resources with all appropriate quantity forms for the target language. Return an array containing ALL plurals with their quantity translations.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "translations": {
+                    "type": "array",
+                    "description": "Array of plural translation objects, one for each input plural resource",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "plural_name": {
+                                "type": "string",
+                                "description": "The plural resource name from the input"
+                            },
+                            "quantities": {
+                                "type": "object",
+                                "description": "Translations for each quantity form",
+                                "properties": {
+                                    "one": {"type": "string"},
+                                    "other": {"type": "string"},
+                                    "zero": {"type": "string"},
+                                    "two": {"type": "string"},
+                                    "few": {"type": "string"},
+                                    "many": {"type": "string"},
+                                },
+                                "additionalProperties": False,
+                            }
+                        },
+                        "required": ["plural_name", "quantities"],
+                        "additionalProperties": False,
+                    }
+                }
+            },
+            "required": ["translations"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 
 class LLMProvider(Enum):
     """Supported LLM providers."""
@@ -282,6 +364,7 @@ class LLMClient:
                 arguments_str = tool_call.function.arguments
 
                 logger.debug(f"Raw function arguments string: {arguments_str}")
+                logger.debug(f"Arguments string length: {len(arguments_str)} chars")
 
                 # Parse the JSON arguments
                 import json
@@ -292,6 +375,15 @@ class LLMClient:
                     f"Function called: {function_name} with {len(arguments)} parameters"
                 )
                 logger.debug(f"Parsed arguments: {arguments}")
+
+                # Additional debugging for batch translations
+                if "translations" in arguments:
+                    translations_dict = arguments["translations"]
+                    logger.debug(f"Translations dict type: {type(translations_dict)}")
+                    logger.debug(f"Translations dict length: {len(translations_dict)}")
+                    if isinstance(translations_dict, dict) and len(translations_dict) > 0:
+                        first_key = list(translations_dict.keys())[0]
+                        logger.debug(f"First translation key: {first_key}, value: {translations_dict[first_key][:50] if len(str(translations_dict[first_key])) > 50 else translations_dict[first_key]}")
 
                 return arguments
 
@@ -419,3 +511,206 @@ def translate_plural_with_llm(
             raise ValueError("LLM returned no plural translations")
 
     return result
+
+
+def translate_strings_batch_with_llm(
+    strings_dict: Dict[str, str],
+    system_message: str,
+    user_prompt: str,
+    llm_config: LLMConfig,
+) -> Dict[str, str]:
+    """
+    Translate multiple strings in a single API call using batch mode.
+
+    This function is much more cost-efficient than translating one-by-one
+    because it sends the system prompt and guidelines only once for all strings.
+
+    Args:
+        strings_dict: Dictionary mapping string keys to source texts
+                     (e.g., {"welcome_msg": "Welcome!", "goodbye_msg": "Goodbye!"})
+        system_message: System prompt defining the translator's role
+        user_prompt: User prompt with translation guidelines (without the strings)
+        llm_config: LLM provider configuration
+
+    Returns:
+        Dictionary mapping string keys to translated texts
+
+    Raises:
+        Exception: For any API-related errors
+    """
+    if not strings_dict:
+        return {}
+
+    client = LLMClient(llm_config)
+
+    # Format the strings as JSON for the prompt
+    import json
+
+    strings_json = json.dumps(strings_dict, indent=2, ensure_ascii=False)
+
+    # Construct the full user prompt with all strings
+    # Make it crystal clear that we need to translate FROM English TO the target language
+    full_user_prompt = (
+        user_prompt
+        + "\n\nTranslate ALL the strings below from English to the target language.\n"
+        + "The strings are provided as JSON key-value pairs. Translate only the values:\n"
+        + strings_json
+    )
+
+    # Construct the messages for the chat completion
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": full_user_prompt},
+    ]
+
+    logger.info(f"Batch translating {len(strings_dict)} strings in a single API call")
+    logger.debug(f"System message length: {len(system_message)} chars")
+    logger.debug(f"User prompt length: {len(full_user_prompt)} chars")
+    logger.debug(f"First 200 chars of user prompt: {full_user_prompt[:200]}...")
+
+    # Use function calling with structured output for guaranteed reliability
+    result = client.chat_completion(
+        messages=messages,
+        tools=[TRANSLATE_STRINGS_BATCH_TOOL],
+        tool_choice="required",
+        temperature=0,  # Deterministic output for consistent translations
+    )
+
+    # Extract translations from function call result
+    logger.debug(f"Raw batch string translation result: {result}")
+    logger.debug(f"Result keys: {list(result.keys())}")
+
+    translations_array = result.get("translations", [])
+
+    if not translations_array:
+        logger.error(f"LLM returned empty translations array. Full result: {result}")
+        raise ValueError("LLM returned empty translations array")
+
+    logger.info(f"Successfully received {len(translations_array)} translations")
+
+    # Convert array of {key, translation} objects to dictionary
+    translations = {}
+    for item in translations_array:
+        key = item.get("key")
+        translation = item.get("translation")
+        if key and translation is not None:  # translation can be empty string
+            translations[key] = translation
+        else:
+            logger.warning(f"Invalid translation item: {item}")
+
+    # Validate that we got translations for all requested keys
+    missing_keys = set(strings_dict.keys()) - set(translations.keys())
+    if missing_keys:
+        logger.warning(
+            f"LLM did not provide translations for some keys: {missing_keys}. "
+            f"Using empty strings for missing translations."
+        )
+        # Fill in missing translations with empty strings
+        for key in missing_keys:
+            translations[key] = ""
+
+    return translations
+
+
+def translate_plurals_batch_with_llm(
+    plurals_dict: Dict[str, Dict[str, str]],
+    system_message: str,
+    user_prompt: str,
+    llm_config: LLMConfig,
+) -> Dict[str, Dict[str, str]]:
+    """
+    Translate multiple plural resources in a single API call using batch mode.
+
+    This function is much more cost-efficient than translating one-by-one
+    because it sends the system prompt and guidelines only once for all plurals.
+
+    Args:
+        plurals_dict: Dictionary mapping plural names to their quantity forms
+                     (e.g., {"days_left": {"one": "1 day", "other": "%d days"}})
+        system_message: System prompt defining the translator's role
+        user_prompt: User prompt with translation guidelines (without the plurals)
+        llm_config: LLM provider configuration
+
+    Returns:
+        Dictionary mapping plural names to their translated quantity forms
+
+    Raises:
+        Exception: For any API-related errors
+    """
+    if not plurals_dict:
+        return {}
+
+    client = LLMClient(llm_config)
+
+    # Format the plurals as JSON for the prompt
+    import json
+
+    plurals_json = json.dumps(plurals_dict, indent=2, ensure_ascii=False)
+
+    # Construct the full user prompt with all plurals
+    # Make it crystal clear that we need to translate FROM English TO the target language
+    full_user_prompt = (
+        user_prompt
+        + "\n\nTranslate ALL the plural resources below from English to the target language.\n"
+        + "Each plural resource has a name and quantity forms. Translate the text in each quantity form:\n"
+        + plurals_json
+    )
+
+    # Construct the messages for the chat completion
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": full_user_prompt},
+    ]
+
+    logger.info(f"Batch translating {len(plurals_dict)} plurals in a single API call")
+
+    # Use function calling with structured output for guaranteed reliability
+    result = client.chat_completion(
+        messages=messages,
+        tools=[TRANSLATE_PLURALS_BATCH_TOOL],
+        tool_choice="required",
+        temperature=0,  # Deterministic output for consistent translations
+    )
+
+    # Extract translations from function call result
+    translations_array = result.get("translations", [])
+
+    if not translations_array:
+        raise ValueError("LLM returned empty translations array")
+
+    logger.info(f"Successfully received {len(translations_array)} plural translations")
+
+    # Convert array of {plural_name, quantities} objects to dictionary
+    translations = {}
+    for item in translations_array:
+        plural_name = item.get("plural_name")
+        quantities = item.get("quantities", {})
+
+        if plural_name and quantities:
+            translations[plural_name] = quantities
+        else:
+            logger.warning(f"Invalid plural translation item: {item}")
+
+    # Validate that we got translations for all requested plural names
+    missing_plurals = set(plurals_dict.keys()) - set(translations.keys())
+    if missing_plurals:
+        logger.warning(
+            f"LLM did not provide translations for some plurals: {missing_plurals}"
+        )
+
+    # Validate that each plural has at least the "other" key (Android requirement)
+    for plural_name, quantities in translations.items():
+        if "other" not in quantities:
+            logger.warning(
+                f"Plural '{plural_name}' missing 'other' key. "
+                f"Provided keys: {list(quantities.keys())}"
+            )
+            # Use the first available key as fallback
+            if quantities:
+                first_key = list(quantities.keys())[0]
+                quantities["other"] = quantities[first_key]
+                logger.info(
+                    f"Using '{first_key}' value as 'other' fallback for '{plural_name}'"
+                )
+
+    return translations

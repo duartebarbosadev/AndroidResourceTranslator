@@ -170,6 +170,21 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
                 result = escape_special_chars(input_text)
                 self.assertEqual(result, expected)
 
+    def test_escape_special_chars_preserves_html_markup(self):
+        """Ensure escaping preserves inline HTML markup and attributes."""
+        simple_html = (
+            'Visit our <a href="https://test.com">website</a> for more info'
+        )
+        self.assertEqual(escape_special_chars(simple_html), simple_html)
+
+        complex_html = (
+            "Don't miss our <a href='https://test.com'>sale</a> at 50% off"
+        )
+        expected_complex = (
+            "Don\\'t miss our <a href=\"https://test.com\">sale</a> at 50\\% off"
+        )
+        self.assertEqual(escape_special_chars(complex_html), expected_complex)
+
     def test_escape_apostrophes_integration_with_translate_text(self):
         """Test that translate_text properly escapes apostrophes in results."""
         with patch(
@@ -455,16 +470,21 @@ class TestAutoTranslation(unittest.TestCase):
         # Build modules dict
         self.modules = {"test_id": self.module}
 
-    @patch("AndroidResourceTranslator.translate_text")
-    @patch("AndroidResourceTranslator.translate_plural_text")
+    @patch("AndroidResourceTranslator.translate_plurals_batch_with_llm")
+    @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
     @patch("AndroidResourceTranslator.update_xml_file")
     def test_auto_translate(
-        self, mock_update_xml, mock_translate_plural, mock_translate_text
+        self,
+        mock_update_xml,
+        mock_translate_strings_batch,
+        mock_translate_plurals_batch,
     ):
         """Test complete auto-translation workflow."""
         # Configure mocks
-        mock_translate_text.return_value = "Adiós"
-        mock_translate_plural.return_value = {"one": "%d día", "other": "%d días"}
+        mock_translate_strings_batch.return_value = {"goodbye": "Adiós"}
+        mock_translate_plurals_batch.return_value = {
+            "days": {"one": "%d día", "other": "%d días"}
+        }
 
         # Create LLMConfig
         llm_config = LLMConfig(
@@ -479,16 +499,18 @@ class TestAutoTranslation(unittest.TestCase):
         )
 
         # Verify translation calls
-        mock_translate_text.assert_called_once_with(
-            "Goodbye",
-            target_language="es",
-            llm_config=llm_config,
-            project_context="Test project",
-        )
+        mock_translate_strings_batch.assert_called_once()
+        strings_payload = mock_translate_strings_batch.call_args.kwargs.get(
+            "strings_dict"
+        ) or mock_translate_strings_batch.call_args.args[0]
+        self.assertEqual(strings_payload, {"goodbye": "Goodbye"})
 
-        mock_translate_plural.assert_called_once()
+        mock_translate_plurals_batch.assert_called_once()
+        plurals_payload = mock_translate_plurals_batch.call_args.kwargs.get(
+            "plurals_dict"
+        ) or mock_translate_plurals_batch.call_args.args[0]
         self.assertEqual(
-            mock_translate_plural.call_args[0][0], {"one": "%d day", "other": "%d days"}
+            plurals_payload, {"days": {"one": "%d day", "other": "%d days"}}
         )
 
         # Verify file updates

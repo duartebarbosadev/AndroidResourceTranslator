@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Application Name -->
+    <string name="app_name">Lista de Compras</string>
+
+    <!-- Welcome Screen -->
+    <string name="welcome_title">Bem-vindo à Lista de Compras</string>
+    <!-- welcome_message is MISSING -->
+    <!-- get_started is MISSING -->
+
+    <!-- Main Screen -->
+    <string name="add_item">Adicionar Item</string>
+    <string name="shopping_lists">Listas de Compras</string>
+    <string name="create_new_list">Criar Nova Lista</string>
+    <!-- search_hint is MISSING -->
+
+    <!-- Item Details -->
+    <string name="item_name">Nome do Item</string>
+    <string name="item_quantity">Quantidade</string>
+    <string name="item_price">Preço: $%1$s</string>
+    <!-- item_added is MISSING -->
+
+    <!-- Placeholders and Formatting -->
+    <!-- items_count is MISSING -->
+    <string name="hello_user">Olá, %s!</string>
+    <string name="total_price">Total: $%.2f</string>
+    <!-- discount_message is MISSING -->
+
+    <!-- Plural Resources -->
+    <!-- items_remaining plural is MISSING -->
+    <!-- days_until_expiry plural is MISSING -->
+
+    <!-- Special Characters -->
+    <!-- discount_rate is MISSING -->
+    <string name="terms_message">Ao continuar, concordas com os nossos Termos e Condições</string>
+    <string name="email_format">Email: utilizador@exemplo.com</string>
+    <!-- quote_example is MISSING -->
+    <!-- apostrophe_example is MISSING -->
+
+    <!-- HTML and CDATA -->
+    <!-- formatted_message is MISSING -->
+    <!-- html_link is MISSING -->
+
+    <!-- Buttons and Actions -->
+    <string name="button_save">Guardar</string>
+    <string name="button_cancel">Cancelar</string>
+    <string name="button_delete">Eliminar</string>
+    <string name="button_share">Partilhar Lista</string>
+    <!-- button_edit is MISSING -->
+
+    <!-- Error Messages -->
+    <string name="error_empty_name">Por favor, insere um nome</string>
+    <!-- error_network is MISSING -->
+    <!-- error_invalid_quantity is MISSING -->
+
+    <!-- Confirmation Messages -->
+    <!-- confirm_delete is MISSING -->
+    <!-- confirm_clear_list is MISSING -->
+
+    <!-- Settings -->
+    <string name="settings">Definições</string>
+    <!-- language_preference is MISSING -->
+    <!-- notification_settings is MISSING -->
+    <!-- dark_mode is MISSING -->
+
+    <!-- Long text example -->
+    <!-- privacy_policy is MISSING -->
+</resources>

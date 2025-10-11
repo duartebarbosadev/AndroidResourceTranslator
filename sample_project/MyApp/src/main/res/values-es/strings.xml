@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Application Name -->
+    <string name="app_name">Lista de Compras</string>
+
+    <!-- Welcome Screen -->
+    <string name="welcome_title">Bienvenido a Lista de Compras</string>
+    <string name="welcome_message">Tu compañero inteligente de compras</string>
+    <!-- get_started is MISSING - will be translated -->
+
+    <!-- Main Screen -->
+    <string name="add_item">Añadir Artículo</string>
+    <string name="shopping_lists">Listas de Compras</string>
+    <!-- create_new_list is MISSING -->
+    <string name="search_hint">Buscar artículos…</string>
+
+    <!-- Item Details -->
+    <string name="item_name">Nombre del Artículo</string>
+    <!-- item_quantity is MISSING -->
+    <string name="item_price">Precio: $%1$s</string>
+    <string name="item_added">Artículo añadido a la lista</string>
+
+    <!-- Placeholders and Formatting -->
+    <string name="items_count">Tienes %d artículos</string>
+    <string name="hello_user">¡Hola, %s!</string>
+    <!-- total_price is MISSING -->
+    <!-- discount_message is MISSING -->
+
+    <!-- Plural Resources -->
+    <plurals name="items_remaining">
+        <item quantity="one">%d artículo restante</item>
+        <item quantity="other">%d artículos restantes</item>
+    </plurals>
+
+    <!-- days_until_expiry plural is MISSING -->
+
+    <!-- Special Characters -->
+    <string name="discount_rate">Oferta especial: ¡50% de descuento!</string>
+    <string name="terms_message">Al continuar, aceptas nuestros Términos y Condiciones</string>
+    <!-- email_format is MISSING -->
+    <!-- quote_example is MISSING -->
+    <!-- apostrophe_example is MISSING -->
+
+    <!-- HTML and CDATA -->
+    <!-- formatted_message is MISSING -->
+    <string name="html_link">Visita nuestro <a href="https://example.com">sitio web</a> para más información</string>
+
+    <!-- Buttons and Actions -->
+    <string name="button_save">Guardar</string>
+    <string name="button_cancel">Cancelar</string>
+    <string name="button_delete">Eliminar</string>
+    <!-- button_share is MISSING -->
+    <!-- button_edit is MISSING -->
+
+    <!-- Error Messages -->
+    <!-- error_empty_name is MISSING -->
+    <string name="error_network">Error de red. Por favor, inténtalo de nuevo.</string>
+    <!-- error_invalid_quantity is MISSING -->
+
+    <!-- Confirmation Messages -->
+    <!-- confirm_delete is MISSING -->
+    <!-- confirm_clear_list is MISSING -->
+
+    <!-- Settings -->
+    <string name="settings">Configuración</string>
+    <string name="language_preference">Idioma</string>
+    <!-- notification_settings is MISSING -->
+    <!-- dark_mode is MISSING -->
+
+    <!-- Long text example -->
+    <!-- privacy_policy is MISSING -->
+</resources>

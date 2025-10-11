@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Application Name -->
+    <string name="app_name">购物清单</string>
+
+    <!-- Welcome Screen -->
+    <string name="welcome_title">欢迎使用购物清单</string>
+    <!-- Most strings are MISSING - this demonstrates heavy translation needs -->
+
+    <!-- Main Screen -->
+    <string name="add_item">添加项目</string>
+    <!-- shopping_lists is MISSING -->
+    <!-- create_new_list is MISSING -->
+    <!-- search_hint is MISSING -->
+
+    <!-- Buttons and Actions -->
+    <string name="button_save">保存</string>
+    <string name="button_cancel">取消</string>
+    <!-- button_delete is MISSING -->
+    <!-- button_share is MISSING -->
+    <!-- button_edit is MISSING -->
+
+    <!-- Settings -->
+    <string name="settings">设置</string>
+    <!-- All other settings strings are MISSING -->
+
+    <!-- All other sections are MISSING -->
+</resources>

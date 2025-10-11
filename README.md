@@ -110,10 +110,10 @@ We recommend the model google/gemini-2.5-flash-preview-09-2025 as it got the bes
 To run the translator on your local machine, execute:
 
 ```bash
-python AndroidResourceTranslator.py /path/to/your/android/project --auto-translate
+python AndroidResourceTranslator.py /path/to/your/android/project
 ```
 
-You can also pass additional parameters like `--project-context` and `--validate-translations` as needed.
+You can also pass additional parameters like `--project-context`, `--validate-translations`, or `--dry-run` (to only check for missing translations without translating) as needed.
 
 ## Configuration
 
@@ -122,7 +122,7 @@ The action supports the following inputs:
 | Input                        | Description                                                                                                                                                                                                                                    | Default Value                                                          | Optional | Example                                                                |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
 | **resources_paths**          | Paths to the Android resource directories. Typically includes directories such as `app/src/main/res`, `library/src/main/res`, etc. If not provided, this action will search throughout the entire project folder.                         | `${{ github.workspace }}`                                              | Yes      | `./app/src/main/res, ./library/src/main/res, ./feature/src/main/res`   |
-| **auto_translate**           | Automatically translate missing resources. Set it to `false` to disable auto-translation.                                                                                                                                                        | `"true"`                                                               | Yes      | `"true"` or `"false"`                                                  |
+| **dry_run**                  | Run in dry-run mode (only report missing translations without translating). Set to `"true"` to enable dry-run mode.                                                                                                                           | `"false"`                                                              | Yes      | `"true"` or `"false"`                                                  |
 | **validate_translations**    | Enable manual validation of translations before saving. When enabled, you will be prompted to confirm each translation.                                                                                                                   | `"false"`                                                              | Yes      | `"true"` or `"false"`                                                  |
 | **log_trace**                | Enable detailed logging. Use `"true"` for verbose output.                                                                                                                                                                                     | `"false"`                                                              | Yes      | `"true"`                                                               |
 | **llm_provider**             | LLM provider to use for translation. Options are `"openai"` or `"openrouter"`.                                                                                                                                                                 | `"openrouter"`                                                             | Yes      | `"openai"`, `"openrouter"`                                              |

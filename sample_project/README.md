@@ -120,8 +120,6 @@ python app/AndroidResourceTranslator.py <path> [options]
 | `--openai-api-key`                | API key (or use env var)                  | `$OPENAI_API_KEY`                         |
 | `--openrouter-api-key`            | OpenRouter API key                        | `$OPENROUTER_API_KEY`                     |
 
-**Batch mode:** The CLI always runs in batch mode for both strings and plurals. The legacy one-by-one flow has been removed, so if you need to investigate a specific entry consider running with `--dry-run` or limiting the resource paths.
-
 ### Supported Models
 
 **OpenRouter (Default):**

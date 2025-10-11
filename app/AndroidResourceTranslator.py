@@ -41,7 +41,6 @@ from llm_provider import (
 # ------------------------------------------------------------------------------
 
 # Maximum number of items to translate in a single batch API call
-# This prevents exceeding token limits while still maximizing efficiency
 MAX_BATCH_SIZE = 100
 
 TRANSLATION_GUIDELINES = """\
@@ -77,7 +76,7 @@ For idiomatic expressions or culturally-charged phrases, that there's no direct 
 Make sure to keep the translation within a reasonable size, not exceeding 20% of the original text length. If the translation is significantly longer, and if possible consider rephrasing or simplifying it while maintaining the original meaning.
 
 **Tone and Formality Consistency:**
-Maintain consistent formality throughout ALL translations based on these principles:
+  Maintain consistent formality throughout ALL translations based on these principles:
 - Default to a conversational but respectful tone appropriate for a consumer android app
 - Match the formality level commonly used in popular, well-localized android apps in the target language
 - Use direct address forms (equivalent to "you" in English) that feel natural in the target language
@@ -1215,7 +1214,7 @@ def auto_translate_resources(
     Args:
         modules: Dictionary of Android modules to process
         llm_config: LLM provider configuration
-    project_context: Optional project context for translations
+        project_context: Optional project context for translations
     """
     translation_log = {}
     total_translated = 0

@@ -1,14 +1,16 @@
 name: "Android Resource Translator"
-description: "Checks Android resource files for missing translations and auto-translates using OpenAI."
-author: "Duarte Barbosa"
+description: "Checks Android resource files for missing translations and auto-translates using OpenAI or OpenRouter."
+author: "DuarteBarbosaDev"
 
 branding:
   icon: 'book-open'
   color: 'green'
 
 env:
+  OPENROUTER_API_KEY:
+    description: "OpenRouter API key (required by default, supports Gemini, Claude, GPT, and more)"
   OPENAI_API_KEY:
-    description: "OpenAI API key for translation (passed via secrets)."
+    description: "OpenAI API key (when using OpenAI provider)"
 
 inputs:
   resources_paths:
@@ -23,10 +25,26 @@ inputs:
     description: "Enable detailed logging. Set to 'true' to enable."
     required: false
     default: "false"
-  openai_model:
-    description: "Specify the OpenAI model to use for translation."
+  llm_provider:
+    description: "LLM provider to use: 'openai' or 'openrouter' (default: openrouter)"
     required: false
-    default: "gpt-4o-mini"
+    default: "openrouter"
+  model:
+    description: "Model to use for translation (e.g., 'google/gemini-2.5-flash-preview-09-2025' for OpenRouter, 'gpt-4o-mini' for OpenAI)"
+    required: false
+    default: "google/gemini-2.5-flash-preview-09-2025"
+  openrouter_site_url:
+    description: "Your site URL for OpenRouter rankings (This Github action is set by default - optional, only used with OpenRouter)"
+    required: false
+    default: "https://github.com/duartebarbosadev/AndroidResourceTranslator"
+  openrouter_site_name:
+    description: "Your site name for OpenRouter rankings (This Github action is set by default - optional, only used with OpenRouter)"
+    required: false
+    default: "AndroidResourceTranslatorAction"
+  openrouter_send_site_info:
+    description: "Send site URL and name to OpenRouter for rankings (This Github action is set by default - set to 'false' to disable)"
+    required: false
+    default: "true"
   project_context:
     description: "Additional project context to include in translation prompts."
     required: false

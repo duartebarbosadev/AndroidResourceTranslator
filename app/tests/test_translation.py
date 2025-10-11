@@ -172,16 +172,12 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
 
     def test_escape_special_chars_preserves_html_markup(self):
         """Ensure escaping preserves inline HTML markup and attributes."""
-        simple_html = (
-            'Visit our <a href="https://test.com">website</a> for more info'
-        )
+        simple_html = 'Visit our <a href="https://test.com">website</a> for more info'
         self.assertEqual(escape_special_chars(simple_html), simple_html)
 
-        complex_html = (
-            "Don't miss our <a href='https://test.com'>sale</a> at 50% off"
-        )
+        complex_html = "Don't miss our <a href='https://test.com'>sale</a> at 50% off"
         expected_complex = (
-            "Don\\'t miss our <a href=\"https://test.com\">sale</a> at 50\\% off"
+            'Don\\\'t miss our <a href="https://test.com">sale</a> at 50\\% off'
         )
         self.assertEqual(escape_special_chars(complex_html), expected_complex)
 
@@ -500,15 +496,17 @@ class TestAutoTranslation(unittest.TestCase):
 
         # Verify translation calls
         mock_translate_strings_batch.assert_called_once()
-        strings_payload = mock_translate_strings_batch.call_args.kwargs.get(
-            "strings_dict"
-        ) or mock_translate_strings_batch.call_args.args[0]
+        strings_payload = (
+            mock_translate_strings_batch.call_args.kwargs.get("strings_dict")
+            or mock_translate_strings_batch.call_args.args[0]
+        )
         self.assertEqual(strings_payload, {"goodbye": "Goodbye"})
 
         mock_translate_plurals_batch.assert_called_once()
-        plurals_payload = mock_translate_plurals_batch.call_args.kwargs.get(
-            "plurals_dict"
-        ) or mock_translate_plurals_batch.call_args.args[0]
+        plurals_payload = (
+            mock_translate_plurals_batch.call_args.kwargs.get("plurals_dict")
+            or mock_translate_plurals_batch.call_args.args[0]
+        )
         self.assertEqual(
             plurals_payload, {"days": {"one": "%d day", "other": "%d days"}}
         )

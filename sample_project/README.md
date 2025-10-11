@@ -96,14 +96,6 @@ Enable verbose output for debugging:
 python app/AndroidResourceTranslator.py sample_project/ --log-trace
 ```
 
-**Test 6: Legacy one-by-one mode**
-
-Need to debug individual requests? Disable batching temporarily:
-
-```bash
-python app/AndroidResourceTranslator.py sample_project/ --no-batch-translate
-```
-
 ## Command Reference
 
 ### Basic Usage
@@ -127,7 +119,8 @@ python app/AndroidResourceTranslator.py <path> [options]
 | `--ignore-folders`                | Comma-separated folders to ignore         | (follows .gitignore)                        |
 | `--openai-api-key`                | API key (or use env var)                  | `$OPENAI_API_KEY`                         |
 | `--openrouter-api-key`            | OpenRouter API key                        | `$OPENROUTER_API_KEY`                     |
-| `--batch-translate` / `--no-batch-translate` | Control the new batch translation pipeline. Batching is on by default; pass `--no-batch-translate` to fall back to the legacy string-by-string flow. | `--batch-translate` (enabled) |
+
+**Batch mode:** The CLI always runs in batch mode for both strings and plurals. The legacy one-by-one flow has been removed, so if you need to investigate a specific entry consider running with `--dry-run` or limiting the resource paths.
 
 ### Supported Models
 

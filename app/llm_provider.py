@@ -103,16 +103,16 @@ TRANSLATE_STRINGS_BATCH_TOOL = {
                         "properties": {
                             "key": {
                                 "type": "string",
-                                "description": "The string resource key from the input"
+                                "description": "The string resource key from the input",
                             },
                             "translation": {
                                 "type": "string",
-                                "description": "The translated text for this key"
-                            }
+                                "description": "The translated text for this key",
+                            },
                         },
                         "required": ["key", "translation"],
-                        "additionalProperties": False
-                    }
+                        "additionalProperties": False,
+                    },
                 }
             },
             "required": ["translations"],
@@ -139,7 +139,7 @@ TRANSLATE_PLURALS_BATCH_TOOL = {
                         "properties": {
                             "plural_name": {
                                 "type": "string",
-                                "description": "The plural resource name from the input"
+                                "description": "The plural resource name from the input",
                             },
                             "quantities": {
                                 "type": "object",
@@ -153,11 +153,11 @@ TRANSLATE_PLURALS_BATCH_TOOL = {
                                     "many": {"type": "string"},
                                 },
                                 "additionalProperties": False,
-                            }
+                            },
                         },
                         "required": ["plural_name", "quantities"],
                         "additionalProperties": False,
-                    }
+                    },
                 }
             },
             "required": ["translations"],
@@ -381,9 +381,14 @@ class LLMClient:
                     translations_dict = arguments["translations"]
                     logger.debug(f"Translations dict type: {type(translations_dict)}")
                     logger.debug(f"Translations dict length: {len(translations_dict)}")
-                    if isinstance(translations_dict, dict) and len(translations_dict) > 0:
+                    if (
+                        isinstance(translations_dict, dict)
+                        and len(translations_dict) > 0
+                    ):
                         first_key = list(translations_dict.keys())[0]
-                        logger.debug(f"First translation key: {first_key}, value: {translations_dict[first_key][:50] if len(str(translations_dict[first_key])) > 50 else translations_dict[first_key]}")
+                        logger.debug(
+                            f"First translation key: {first_key}, value: {translations_dict[first_key][:50] if len(str(translations_dict[first_key])) > 50 else translations_dict[first_key]}"
+                        )
 
                 return arguments
 

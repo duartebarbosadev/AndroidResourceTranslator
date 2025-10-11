@@ -193,6 +193,7 @@ def _set_element_inner_xml(element, content: str) -> None:
     for child in wrapper:
         element.append(child)
 
+
 def configure_logging(trace: bool) -> None:
     """Configure logging to console and optionally to a file."""
     log_level = logging.DEBUG if trace else logging.INFO
@@ -940,7 +941,6 @@ def _translate_missing_strings(
     lang: str,
     llm_config: LLMConfig,
     project_context: str,
-    use_batch_mode: bool = True,
 ) -> List[Dict]:
     """
     Helper function to translate missing strings for a resource file.
@@ -953,8 +953,6 @@ def _translate_missing_strings(
         lang: Target language code
         llm_config: LLM provider configuration
         project_context: Optional project context
-        use_batch_mode: If True, translate all strings in batches (more efficient).
-                       If False, translate one-by-one (legacy mode).
 
     Returns:
         List of translation result dictionaries
@@ -989,74 +987,35 @@ def _translate_missing_strings(
     if project_context:
         system_message += f"\nProject context: {project_context}"
 
-    if use_batch_mode:
-        # BATCH MODE: Translate all strings in chunks
+    logger.info(
+        f"Translating {len(non_empty_strings)} strings for {lang} using batch mode"
+    )
+
+    # Split into chunks if needed
+    string_keys = list(non_empty_strings.keys())
+    for i in range(0, len(string_keys), MAX_BATCH_SIZE):
+        chunk_keys = string_keys[i : i + MAX_BATCH_SIZE]
+        chunk_dict = {key: non_empty_strings[key] for key in chunk_keys}
+
         logger.info(
-            f"Using BATCH MODE to translate {len(non_empty_strings)} strings for {lang}"
+            f"Translating batch of {len(chunk_dict)} strings (chunk {i // MAX_BATCH_SIZE + 1})"
         )
 
-        # Split into chunks if needed
-        string_keys = list(non_empty_strings.keys())
-        for i in range(0, len(string_keys), MAX_BATCH_SIZE):
-            chunk_keys = string_keys[i : i + MAX_BATCH_SIZE]
-            chunk_dict = {key: non_empty_strings[key] for key in chunk_keys}
-
-            logger.info(
-                f"Translating batch of {len(chunk_dict)} strings (chunk {i // MAX_BATCH_SIZE + 1})"
+        try:
+            # Translate the entire batch
+            translations = translate_strings_batch_with_llm(
+                strings_dict=chunk_dict,
+                system_message=system_message,
+                user_prompt=base_prompt,
+                llm_config=llm_config,
             )
 
-            try:
-                # Translate the entire batch
-                translations = translate_strings_batch_with_llm(
-                    strings_dict=chunk_dict,
-                    system_message=system_message,
-                    user_prompt=base_prompt,
-                    llm_config=llm_config,
-                )
+            # Process results
+            for key, translated in translations.items():
+                source_text = chunk_dict[key]
 
-                # Process results
-                for key, translated in translations.items():
-                    source_text = chunk_dict[key]
-
-                    # Ensure special characters are escaped
-                    translated = escape_special_chars(translated)
-
-                    logger.info(
-                        f"Translated string '{key}' to {lang}: '{source_text}' -> '{translated}'"
-                    )
-
-                    # Update the resource
-                    res.strings[key] = translated
-                    res.modified = True
-
-                    # Add to results
-                    results.append(
-                        {
-                            "key": key,
-                            "source": source_text,
-                            "translation": translated,
-                        }
-                    )
-
-            except Exception as e:
-                logger.error(f"Error translating string batch: {e}")
-                raise
-
-    else:
-        # LEGACY MODE: Translate one-by-one
-        logger.info(
-            f"Using ONE-BY-ONE MODE to translate {len(non_empty_strings)} strings for {lang}"
-        )
-
-        for key, source_text in non_empty_strings.items():
-            try:
-                # Translate the string
-                translated = translate_text(
-                    source_text,
-                    target_language=lang,
-                    llm_config=llm_config,
-                    project_context=project_context,
-                )
+                # Ensure special characters are escaped
+                translated = escape_special_chars(translated)
 
                 logger.info(
                     f"Translated string '{key}' to {lang}: '{source_text}' -> '{translated}'"
@@ -1074,9 +1033,10 @@ def _translate_missing_strings(
                         "translation": translated,
                     }
                 )
-            except Exception as e:
-                logger.error(f"Error translating string '{key}': {e}")
-                raise
+
+        except Exception as e:
+            logger.error(f"Error translating string batch: {e}")
+            raise
 
     return results
 
@@ -1087,7 +1047,6 @@ def _translate_missing_plurals(
     lang: str,
     llm_config: LLMConfig,
     project_context: str,
-    use_batch_mode: bool = True,
 ) -> List[Dict]:
     """
     Helper function to translate missing plurals for a resource file.
@@ -1099,8 +1058,6 @@ def _translate_missing_plurals(
         lang: Target language code
         llm_config: LLM provider configuration
         project_context: Optional project context
-        use_batch_mode: If True, translate all plurals in batches (more efficient).
-                       If False, translate one-by-one (legacy mode).
 
     Returns:
         List of translation result dictionaries
@@ -1125,77 +1082,36 @@ def _translate_missing_plurals(
     if project_context:
         system_message += f"\nProject context: {project_context}"
 
-    if use_batch_mode:
-        # BATCH MODE: Translate all plurals in chunks
+    logger.info(
+        f"Translating {len(missing_plurals)} plurals for {lang} using batch mode"
+    )
+
+    # Split into chunks if needed
+    plural_names = list(missing_plurals.keys())
+    for i in range(0, len(plural_names), MAX_BATCH_SIZE):
+        chunk_names = plural_names[i : i + MAX_BATCH_SIZE]
+        chunk_dict = {name: missing_plurals[name] for name in chunk_names}
+
         logger.info(
-            f"Using BATCH MODE to translate {len(missing_plurals)} plurals for {lang}"
+            f"Translating batch of {len(chunk_dict)} plurals (chunk {i // MAX_BATCH_SIZE + 1})"
         )
 
-        # Split into chunks if needed
-        plural_names = list(missing_plurals.keys())
-        for i in range(0, len(plural_names), MAX_BATCH_SIZE):
-            chunk_names = plural_names[i : i + MAX_BATCH_SIZE]
-            chunk_dict = {name: missing_plurals[name] for name in chunk_names}
-
-            logger.info(
-                f"Translating batch of {len(chunk_dict)} plurals (chunk {i // MAX_BATCH_SIZE + 1})"
+        try:
+            # Translate the entire batch
+            translations = translate_plurals_batch_with_llm(
+                plurals_dict=chunk_dict,
+                system_message=system_message,
+                user_prompt=base_prompt,
+                llm_config=llm_config,
             )
 
-            try:
-                # Translate the entire batch
-                translations = translate_plurals_batch_with_llm(
-                    plurals_dict=chunk_dict,
-                    system_message=system_message,
-                    user_prompt=base_prompt,
-                    llm_config=llm_config,
-                )
+            # Process results
+            for plural_name, generated_plural in translations.items():
+                current_map = res.plurals.get(plural_name, {})
 
-                # Process results
-                for plural_name, generated_plural in translations.items():
-                    current_map = res.plurals.get(plural_name, {})
-
-                    # Ensure special characters are escaped
-                    for quantity, text in generated_plural.items():
-                        generated_plural[quantity] = escape_special_chars(text)
-
-                    # Merge with existing translations
-                    merged = generated_plural.copy()
-                    merged.update(current_map)
-                    res.plurals[plural_name] = merged
-                    res.modified = True
-
-                    logger.info(
-                        f"Translated plural group '{plural_name}' for language '{lang}': {res.plurals[plural_name]}"
-                    )
-
-                    # Add to results
-                    results.append(
-                        {
-                            "plural_name": plural_name,
-                            "translations": res.plurals[plural_name],
-                        }
-                    )
-
-            except Exception as e:
-                logger.error(f"Error translating plural batch: {e}")
-                raise
-
-    else:
-        # LEGACY MODE: Translate one-by-one
-        logger.info(
-            f"Using ONE-BY-ONE MODE to translate {len(missing_plurals)} plurals for {lang}"
-        )
-
-        for plural_name, default_map in missing_plurals.items():
-            current_map = res.plurals.get(plural_name, {})
-            try:
-                # Generate plural translations
-                generated_plural = translate_plural_text(
-                    default_map,
-                    target_language=lang,
-                    llm_config=llm_config,
-                    project_context=project_context,
-                )
+                # Ensure special characters are escaped
+                for quantity, text in generated_plural.items():
+                    generated_plural[quantity] = escape_special_chars(text)
 
                 # Merge with existing translations
                 merged = generated_plural.copy()
@@ -1214,9 +1130,10 @@ def _translate_missing_plurals(
                         "translations": res.plurals[plural_name],
                     }
                 )
-            except Exception as e:
-                logger.error(f"Error translating plural '{plural_name}': {e}")
-                raise
+
+        except Exception as e:
+            logger.error(f"Error translating plural batch: {e}")
+            raise
 
     return results
 
@@ -1290,7 +1207,6 @@ def auto_translate_resources(
     modules: Dict[str, AndroidModule],
     llm_config: LLMConfig,
     project_context: str,
-    use_batch_mode: bool = True,
 ) -> dict:
     """
     For each non-default language resource, auto-translate missing strings and plural items.
@@ -1299,9 +1215,7 @@ def auto_translate_resources(
     Args:
         modules: Dictionary of Android modules to process
         llm_config: LLM provider configuration
-        project_context: Optional project context for translations
-        use_batch_mode: If True (default), translate all strings/plurals per language in batches.
-                       If False, translate one-by-one (legacy mode).
+    project_context: Optional project context for translations
     """
     translation_log = {}
     total_translated = 0
@@ -1361,7 +1275,6 @@ def auto_translate_resources(
                         lang,
                         llm_config,
                         project_context,
-                        use_batch_mode,
                     )
                     translation_log[module.name][lang]["strings"].extend(string_results)
                     total_translated += len(string_results)
@@ -1374,7 +1287,6 @@ def auto_translate_resources(
                         lang,
                         llm_config,
                         project_context,
-                        use_batch_mode,
                     )
                     translation_log[module.name][lang]["plurals"].extend(plural_results)
                     total_translated += sum(
@@ -1681,16 +1593,12 @@ def main() -> None:
             else []
         )
 
-        # Batch translation mode (default: enabled)
-        batch_translate = os.environ.get("INPUT_BATCH_TRANSLATE", "true").lower() == "true"
-
         print(
             "Running with parameters from environment variables. "
             f"Resources Paths: {resources_paths}, Dry Run: {dry_run}, "
             f"Log Trace: {log_trace}, "
             f"LLM Provider: {llm_provider}, Model: {model}, "
-            f"Project Context: {project_context}, Ignore Folders: {ignore_folders}, "
-            f"Batch Translate: {batch_translate}"
+            f"Project Context: {project_context}, Ignore Folders: {ignore_folders}"
         )
 
     else:
@@ -1784,19 +1692,6 @@ def main() -> None:
         )
 
         # Batch translation mode
-        parser.add_argument(
-            "--batch-translate",
-            action="store_true",
-            default=True,
-            help="Translate all strings/plurals per language in batches for better efficiency (default: enabled, use --no-batch-translate to disable)",
-        )
-        parser.add_argument(
-            "--no-batch-translate",
-            dest="batch_translate",
-            action="store_false",
-            help="Translate strings one-by-one instead of in batches (less efficient, legacy mode)",
-        )
-
         args = parser.parse_args()
 
         resources_paths = args.resources_paths
@@ -1823,16 +1718,13 @@ def main() -> None:
             for folder in args.ignore_folders.split(",")
             if folder.strip()
         ]
-        batch_translate = args.batch_translate
-
         # Don't print args because it will come with the API KEY
         print(
             "Running with command-line parameters. "
             f"Resources Paths: {resources_paths}, Dry Run: {dry_run}, "
             f"Log Trace: {log_trace}, "
             f"LLM Provider: {llm_provider}, Model: {model}, "
-            f"Project Context: {project_context}, Ignore Folders: {ignore_folders}, "
-            f"Batch Translate: {batch_translate}"
+            f"Project Context: {project_context}, Ignore Folders: {ignore_folders}"
         )
 
     configure_logging(log_trace)
@@ -1928,12 +1820,10 @@ def main() -> None:
             sys.exit(1)
 
         logger.info(f"Starting translation using {llm_provider} with model {model}")
-        logger.info(f"Batch translation mode: {'enabled' if batch_translate else 'disabled (one-by-one mode)'}")
         translation_log = auto_translate_resources(
             merged_modules,
             llm_config,
             project_context,
-            use_batch_mode=batch_translate,
         )
 
     # Whether or not auto-translation was performed, still check for missing translations.

@@ -1433,9 +1433,7 @@ def main() -> None:
             if resources_paths_input
             else []
         )
-        dry_run = (
-            os.environ.get("INPUT_DRY_RUN", "false").lower() == "true"
-        )
+        dry_run = os.environ.get("INPUT_DRY_RUN", "false").lower() == "true"
         # No manual validation on GitHub; force it off.
         validate_translations = False
         log_trace = os.environ.get("INPUT_LOG_TRACE", "false").lower() == "true"
@@ -1595,10 +1593,7 @@ def main() -> None:
 
         # API Keys - determine based on provider (strict matching)
         if llm_provider == "openrouter":
-            api_key = (
-                args.openrouter_api_key
-                or os.environ.get("OPENROUTER_API_KEY")
-            )
+            api_key = args.openrouter_api_key or os.environ.get("OPENROUTER_API_KEY")
         else:
             api_key = args.openai_api_key or os.environ.get("OPENAI_API_KEY")
 
@@ -1626,27 +1621,33 @@ def main() -> None:
 
     # Early validation: Check API key if not in dry-run mode
     if not dry_run and not api_key:
-        env_var_name = "OPENROUTER_API_KEY" if llm_provider == "openrouter" else "OPENAI_API_KEY"
-        print(f"\n========================================")
-        print(f"ERROR: API key not found!")
-        print(f"========================================")
-        print(f"Translation is enabled (not in dry-run mode) but no API key was provided.")
-        print(f"\nTo fix this:")
-        print(f"\n1. For GitHub Actions, add {env_var_name} to your repository secrets:")
-        print(f"   - Go to Settings > Secrets and variables > Actions")
+        env_var_name = (
+            "OPENROUTER_API_KEY" if llm_provider == "openrouter" else "OPENAI_API_KEY"
+        )
+        print("\n========================================")
+        print("ERROR: API key not found!")
+        print("========================================")
+        print(
+            "Translation is enabled (not in dry-run mode) but no API key was provided."
+        )
+        print("\nTo fix this:")
+        print(
+            f"\n1. For GitHub Actions, add {env_var_name} to your repository secrets:"
+        )
+        print("   - Go to Settings > Secrets and variables > Actions")
         print(f"   - Add a new secret named: {env_var_name}")
-        print(f"   - Pass it via env in your workflow:")
-        print(f"     env:")
+        print("   - Pass it via env in your workflow:")
+        print("     env:")
         print(f"       {env_var_name}: ${{{{ secrets.{env_var_name} }}}}")
-        print(f"\n2. For local execution, set the environment variable:")
+        print("\n2. For local execution, set the environment variable:")
         print(f"   export {env_var_name}=your_key_here")
-        print(f"\n3. Or pass it as a command-line argument:")
+        print("\n3. Or pass it as a command-line argument:")
         print(f"   --{llm_provider}-api-key YOUR_KEY")
         if llm_provider == "openrouter":
-            print(f"\nGet your API key at: https://openrouter.ai/keys")
+            print("\nGet your API key at: https://openrouter.ai/keys")
         else:
-            print(f"\nGet your API key at: https://platform.openai.com/api-keys")
-        print(f"========================================\n")
+            print("\nGet your API key at: https://platform.openai.com/api-keys")
+        print("========================================\n")
         sys.exit(1)
 
     if not resources_paths:
@@ -1708,9 +1709,7 @@ def main() -> None:
             logger.error(f"Error creating LLM configuration: {e}")
             sys.exit(1)
 
-        logger.info(
-            f"Starting translation using {llm_provider} with model {model}"
-        )
+        logger.info(f"Starting translation using {llm_provider} with model {model}")
         translation_log = auto_translate_resources(
             merged_modules,
             llm_config,

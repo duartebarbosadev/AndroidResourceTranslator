@@ -172,7 +172,9 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
 
     def test_escape_apostrophes_integration_with_translate_text(self):
         """Test that translate_text properly escapes apostrophes in results."""
-        with patch("AndroidResourceTranslator.translate_with_llm") as mock_translate_with_llm:
+        with patch(
+            "AndroidResourceTranslator.translate_with_llm"
+        ) as mock_translate_with_llm:
             # Configure mock to return text with apostrophes
             mock_translate_with_llm.return_value = (
                 "Si us plau, activa Scrolless a la configuració d'accessibilitat."
@@ -180,9 +182,7 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
 
             # Create LLMConfig
             llm_config = LLMConfig(
-                provider=LLMProvider.OPENAI,
-                api_key="test_api_key",
-                model="test-model"
+                provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
             )
 
             # Execute the function
@@ -201,7 +201,9 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
 
     def test_escape_special_chars_integration_with_translate_text(self):
         """Test that translate_text properly escapes all special characters in results."""
-        with patch("AndroidResourceTranslator.translate_with_llm") as mock_translate_with_llm:
+        with patch(
+            "AndroidResourceTranslator.translate_with_llm"
+        ) as mock_translate_with_llm:
             # Configure mock to return text with multiple special characters
             mock_translate_with_llm.return_value = (
                 'Mensaje con "comillas", apóstrofo\', 25% y usuario@ejemplo.com'
@@ -209,9 +211,7 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
 
             # Create LLMConfig
             llm_config = LLMConfig(
-                provider=LLMProvider.OPENAI,
-                api_key="test_api_key",
-                model="test-model"
+                provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
             )
 
             # Execute the function
@@ -230,15 +230,18 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
 
     def test_escape_apostrophes_integration_with_translate_plural_text(self):
         """Test that translate_plural_text properly escapes apostrophes in results."""
-        with patch("AndroidResourceTranslator.translate_plural_with_llm") as mock_translate_plural_with_llm:
+        with patch(
+            "AndroidResourceTranslator.translate_plural_with_llm"
+        ) as mock_translate_plural_with_llm:
             # Configure mock with JSON plural response containing apostrophes
-            mock_translate_plural_with_llm.return_value = {"one": "%d element d'accessibilitat", "other": "%d elements d'accessibilitat"}
+            mock_translate_plural_with_llm.return_value = {
+                "one": "%d element d'accessibilitat",
+                "other": "%d elements d'accessibilitat",
+            }
 
             # Create LLMConfig
             llm_config = LLMConfig(
-                provider=LLMProvider.OPENAI,
-                api_key="test_api_key",
-                model="test-model"
+                provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
             )
 
             # Execute the function
@@ -259,15 +262,18 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
 
     def test_escape_special_chars_integration_with_translate_plural_text(self):
         """Test that translate_plural_text properly escapes all special characters in results."""
-        with patch("AndroidResourceTranslator.translate_plural_with_llm") as mock_translate_plural_with_llm:
+        with patch(
+            "AndroidResourceTranslator.translate_plural_with_llm"
+        ) as mock_translate_plural_with_llm:
             # Configure mock with JSON plural response containing multiple special characters
-            mock_translate_plural_with_llm.return_value = {"one": '%d "elemento" al 50% en mi@correo', "other": '%d "elementos" al 50% en mi@correo'}
+            mock_translate_plural_with_llm.return_value = {
+                "one": '%d "elemento" al 50% en mi@correo',
+                "other": '%d "elementos" al 50% en mi@correo',
+            }
 
             # Create LLMConfig
             llm_config = LLMConfig(
-                provider=LLMProvider.OPENAI,
-                api_key="test_api_key",
-                model="test-model"
+                provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
             )
 
             # Execute the function
@@ -300,9 +306,7 @@ class TestTranslation(unittest.TestCase):
 
         # Create LLMConfig
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI,
-            api_key="test_api_key",
-            model="test-model"
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
         )
 
         # Execute the function
@@ -319,16 +323,16 @@ class TestTranslation(unittest.TestCase):
 
         # Verify API call parameters
         args = mock_translate_with_llm.call_args
-        self.assertIn("Hello World", args[0][0])  # Check text argument contains source text
+        self.assertIn(
+            "Hello World", args[0][0]
+        )  # Check text argument contains source text
         self.assertEqual(args[0][3], llm_config)  # Check correct LLMConfig
 
     def test_translate_text_empty_string(self, mock_translate_with_llm):
         """Test that empty strings are not sent to the API."""
         # Create LLMConfig
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI,
-            api_key="test_api_key",
-            model="test-model"
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
         )
 
         # Execute the function with empty input
@@ -345,9 +349,7 @@ class TestTranslation(unittest.TestCase):
 
         # Create LLMConfig
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI,
-            api_key="test_api_key",
-            model="test-model"
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
         )
 
         # Execute with project context
@@ -369,14 +371,17 @@ class TestTranslation(unittest.TestCase):
         """Test translating a plural resource with proper JSON response."""
         # The test needs to mock translate_plural_with_llm instead for plural translations
         # Configure mock with proper plural dict response
-        with patch("AndroidResourceTranslator.translate_plural_with_llm") as mock_translate_plural:
-            mock_translate_plural.return_value = {"one": "%d elemento", "other": "%d elementos"}
+        with patch(
+            "AndroidResourceTranslator.translate_plural_with_llm"
+        ) as mock_translate_plural:
+            mock_translate_plural.return_value = {
+                "one": "%d elemento",
+                "other": "%d elementos",
+            }
 
             # Create LLMConfig
             llm_config = LLMConfig(
-                provider=LLMProvider.OPENAI,
-                api_key="test_api_key",
-                model="test-model"
+                provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
             )
 
             # Execute the function
@@ -396,14 +401,14 @@ class TestTranslation(unittest.TestCase):
     def test_translate_plural_text_error(self, mock_translate_with_llm):
         """Test error handling when LLM API fails."""
         # Configure mock to raise exception for plural translations
-        with patch("AndroidResourceTranslator.translate_plural_with_llm") as mock_translate_plural:
+        with patch(
+            "AndroidResourceTranslator.translate_plural_with_llm"
+        ) as mock_translate_plural:
             mock_translate_plural.side_effect = Exception("API error")
 
             # Create LLMConfig
             llm_config = LLMConfig(
-                provider=LLMProvider.OPENAI,
-                api_key="test_api_key",
-                model="test-model"
+                provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
             )
 
             # Execute and verify exception propagation
@@ -463,9 +468,7 @@ class TestAutoTranslation(unittest.TestCase):
 
         # Create LLMConfig
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI,
-            api_key="test_api_key",
-            model="test-model"
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
         )
 
         # Execute auto translation

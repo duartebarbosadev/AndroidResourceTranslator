@@ -61,24 +61,23 @@ sample_project/
 See what translations are missing without making any changes:
 
 ```bash
-python app/AndroidResourceTranslator.py sample_project/
+python app/AndroidResourceTranslator.py sample_project/ --dry-run
 ```
 
-**Test 2: Auto-translate (Default: OpenRouter with Gemini)**
+**Test 2: Translate (Default: OpenRouter with Gemini)**
 
 Automatically translate all missing strings using the default provider and model:
 
 ```bash
-python app/AndroidResourceTranslator.py sample_project/ --auto-translate
+python app/AndroidResourceTranslator.py sample_project/
 ```
 
-**Test 3: Auto-translate with OpenAI**
+**Test 3: Translate with OpenAI**
 
 Use OpenAI instead of the default OpenRouter:
 
 ```bash
 python app/AndroidResourceTranslator.py sample_project/ \
-    --auto-translate \
     --llm-provider openai \
     --model gpt-4o-mini
 ```
@@ -89,7 +88,6 @@ Provide additional context for better translations:
 
 ```bash
 python app/AndroidResourceTranslator.py sample_project/ \
-    --auto-translate \
     --project-context "A shopping list mobile application for groceries and household items"
 ```
 
@@ -99,7 +97,6 @@ Enable verbose output for debugging:
 
 ```bash
 python app/AndroidResourceTranslator.py sample_project/ \
-    --auto-translate \
     --log-trace
 ```
 
@@ -115,7 +112,7 @@ python app/AndroidResourceTranslator.py <path> [options]
 
 | Option                              | Description                               | Default                                     |
 | ----------------------------------- | ----------------------------------------- | ------------------------------------------- |
-| `--auto-translate`, `-a`        | Enable automatic translation              | `False`                                   |
+| `--dry-run`, `-d`               | Only report missing translations (don't translate) | `False`                              |
 | `--validate-translations`, `-v` | Manually validate each translation        | `False`                                   |
 | `--log-trace`, `-l`             | Enable detailed logging                   | `False`                                   |
 | `--llm-provider`                  | LLM provider:`openai` or `openrouter` | `openrouter`                              |
@@ -150,7 +147,7 @@ See [OpenRouter Models](https://openrouter.ai/docs/models) for the complete list
 
 ### Dry Run Output
 
-When you run without `--auto-translate`, you'll see a report like:
+When you run in dry-run mode (`--dry-run`), you'll see a report like:
 
 ```
 Found 1 module(s) with resources

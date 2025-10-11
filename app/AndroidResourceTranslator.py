@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Android Resource Translation Checker & Auto-Translator
+Android Resource Auto-Translator
 
 This script scans Android resource files (strings.xml) for string and plural resources,
 reports missing translations, and can automatically translate missing entries using OpenAI.
@@ -1688,7 +1688,7 @@ def main() -> None:
             module.print_resources()
 
     translation_log = {}
-    # If not in dry-run mode, run the auto-translation process.
+    # If not in dry-run mode, run the translation process.
     if not dry_run:
         # Create LLM configuration
         try:
@@ -1709,7 +1709,7 @@ def main() -> None:
             sys.exit(1)
 
         logger.info(
-            f"Starting auto-translation using {llm_provider} with model {model}"
+            f"Starting translation using {llm_provider} with model {model}"
         )
         translation_log = auto_translate_resources(
             merged_modules,

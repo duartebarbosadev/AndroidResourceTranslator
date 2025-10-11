@@ -1,5 +1,5 @@
 name: "Android Resource Translator"
-description: "Checks Android resource files for missing translations and auto-translates using OpenAI or OpenRouter."
+description: "Checks Android resource files for missing translations and automatically translates them using OpenAI or OpenRouter."
 author: "DuarteBarbosaDev"
 
 branding:

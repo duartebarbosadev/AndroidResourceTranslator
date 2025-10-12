@@ -386,8 +386,10 @@ class LLMClient:
                         and len(translations_dict) > 0
                     ):
                         first_key = list(translations_dict.keys())[0]
+                        value = translations_dict[first_key]
+                        formatted_value = value[:50] if len(str(value)) > 50 else value
                         logger.debug(
-                            f"First translation key: {first_key}, value: {translations_dict[first_key][:50] if len(str(translations_dict[first_key])) > 50 else translations_dict[first_key]}"
+                            f"First translation key: {first_key}, value: {formatted_value}"
                         )
 
                 return arguments

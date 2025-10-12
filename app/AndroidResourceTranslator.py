@@ -1537,7 +1537,6 @@ def main() -> None:
             "If empty, .gitignore patterns will be used instead.",
         )
 
-        # Batch translation mode
         args = parser.parse_args()
 
         resources_paths = args.resources_paths

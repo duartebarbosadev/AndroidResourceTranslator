@@ -8,11 +8,9 @@ reports missing translations, and can automatically translate missing entries us
 
 import logging
 import sys
-import json
 import re
 import os
 from pathlib import Path
-from xml.etree import ElementTree
 from collections import defaultdict
 from typing import Dict, Set, List, Tuple
 from lxml import etree
@@ -30,8 +28,6 @@ from git_utils import (
 from llm_provider import (
     LLMProvider,
     LLMConfig,
-    translate_with_llm,
-    translate_plural_with_llm,
     translate_strings_batch_with_llm,
     translate_plurals_batch_with_llm,
 )
@@ -629,55 +625,6 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
         raise
 
 
-def indent_xml(elem: ElementTree.Element, level: int = 0) -> None:
-    """
-    Recursively indent an XML element tree for pretty-printing.
-
-    This utility function adds appropriate indentation to an XML element tree,
-    making the XML output more readable by humans. It works by modifying the
-    text and tail attributes of each element to include newlines and spaces.
-
-    The function handles both container elements (with children) and leaf elements
-    (without children) differently to ensure proper formatting:
-    - Container elements get their children indented one level deeper
-    - The last child in a container receives special formatting for its tail
-    - Leaf elements get proper indentation for their tail content
-
-    Args:
-        elem: The XML element to indent
-        level: The current indentation level (0 for root element)
-
-    Returns:
-        None - the element tree is modified in place
-    """
-    pad = "    "  # Standard 4 spaces per indentation level
-
-    # Elements with children need special handling
-    if len(elem):
-        # Indent the text immediately inside the opening tag if it's just whitespace
-        if not elem.text or not elem.text.strip():
-            elem.text = "\n" + (level + 1) * pad
-
-        # Process all children except the last one
-        for child in elem[:-1]:
-            # Recursively indent the child
-            indent_xml(child, level + 1)
-            # Add appropriate indentation after the child's closing tag
-            if not child.tail or not child.tail.strip():
-                child.tail = "\n" + (level + 1) * pad
-
-        # Handle the last child specially
-        indent_xml(elem[-1], level + 1)
-        # Indent after the last child's closing tag (one level less)
-        if not elem[-1].tail or not elem[-1].tail.strip():
-            elem[-1].tail = "\n" + level * pad
-
-    # For elements without children, just handle the tail if we're not at the root
-    else:
-        if level and (not elem.tail or not elem.tail.strip()):
-            elem.tail = "\n" + level * pad
-
-
 # ------------------------------------------------------------------------------
 # Translation & OpenAI API Integration
 # ------------------------------------------------------------------------------
@@ -826,123 +773,6 @@ def escape_special_chars(text: str) -> str:
             pass
 
     return _escape_plain(text)
-
-
-def translate_text(
-    text: str, target_language: str, llm_config: LLMConfig, project_context: str
-) -> str:
-    """
-    Translate a single string resource to the target language using the configured LLM provider.
-
-    This function handles the translation of a simple text string (typically from an
-    Android string resource) to the specified target language. It builds a prompt
-    using the translation guidelines, sends it to the LLM API, and returns the
-    translated result.
-
-    The translation follows specific guidelines for mobile UI strings, maintaining
-    proper formatting, placeholders, and Android-specific requirements. If project
-    context is provided, it's included to help provide more accurate translations.
-
-    Args:
-        text: The source text to translate
-        target_language: The target language code (e.g., "es", "fr", "zh-rCN")
-        llm_config: LLM provider configuration (provider, API key, model, etc.)
-        project_context: Optional additional context about the project
-
-    Returns:
-        The translated text in the target language
-
-    Note:
-        Empty strings are returned as-is without calling the API
-    """
-    # Don't process empty strings
-    if text.strip() == "":
-        return ""
-
-    # Get the language name for better context in prompts
-    language_name = get_language_name(target_language)
-
-    # Build the prompt with translation guidelines and the source text
-    prompt = (
-        TRANSLATION_GUIDELINES
-        + TRANSLATE_FINAL_TEXT.format(target_language=language_name)
-        + text
-    )
-
-    # Configure the system message for the API call
-    system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=language_name)
-    if project_context:
-        system_message += f"\nProject context: {project_context}"
-
-    # Call LLM API to get the translation
-    translated = translate_with_llm(text, system_message, prompt, llm_config)
-
-    # Ensure all special characters are properly escaped
-    translated = escape_special_chars(translated)
-
-    return translated
-
-
-def translate_plural_text(
-    source_plural: Dict[str, str],
-    target_language: str,
-    llm_config: LLMConfig,
-    project_context: str,
-) -> Dict[str, str]:
-    """
-    Translate Android plural resources to the target language using the configured LLM provider.
-
-    This function handles the translation of plural string resources, which require
-    special handling because different languages have different plural forms. For
-    example, English typically has two forms (singular/plural), while Slavic languages
-    may have multiple forms for different quantities.
-
-    The function uses function calling with structured outputs to guarantee
-    the returned data matches the expected schema (no JSON parsing errors).
-
-    Args:
-        source_plural: Dictionary mapping plural quantity keys to strings
-                      (e.g., {"one": "%d day", "other": "%d days"})
-        target_language: The target language code (e.g., "es", "fr", "zh-rCN")
-        llm_config: LLM provider configuration (provider, API key, model, etc.)
-        project_context: Optional additional context about the project
-
-    Returns:
-        Dictionary mapping plural quantity keys to translated strings
-
-    Raises:
-        Exception: For any API-related errors
-    """
-    # Convert source plural forms to JSON format for the prompt
-    source_json = json.dumps(source_plural, indent=2)
-
-    # Get the language name for better context in prompts
-    language_name = get_language_name(target_language)
-
-    # Build the prompt with both standard and plural-specific guidelines
-    prompt = (
-        TRANSLATION_GUIDELINES
-        + PLURAL_GUIDELINES_ADDITION
-        + TRANSLATE_FINAL_TEXT.format(target_language=target_language)
-        + source_json
-    )
-
-    # Configure the system message for the API call
-    system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=language_name)
-    if project_context:
-        system_message += f"\nProject context: {project_context}"
-
-    # Call LLM API to get the translation
-    # translate_plural_with_llm now returns a Dict directly (no JSON parsing needed!)
-    plural_dict = translate_plural_with_llm(
-        source_json, system_message, prompt, llm_config
-    )
-
-    # Ensure all special characters are properly escaped in all plural forms
-    for quantity, text in plural_dict.items():
-        plural_dict[quantity] = escape_special_chars(text)
-
-    return plural_dict
 
 
 # ------------------------------------------------------------------------------

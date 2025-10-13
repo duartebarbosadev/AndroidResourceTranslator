@@ -364,7 +364,6 @@ class LLMClient:
                 arguments_str = tool_call.function.arguments
 
                 logger.debug(f"Raw function arguments string: {arguments_str}")
-                logger.debug(f"Arguments string length: {len(arguments_str)} chars")
 
                 # Parse the JSON arguments
                 import json

@@ -6,7 +6,6 @@ This script scans Android resource files (strings.xml) for string and plural res
 reports missing translations, and can automatically translate missing entries using OpenAI.
 """
 
-import argparse
 import logging
 import sys
 import re
@@ -1617,6 +1616,8 @@ def main() -> None:
         startup_message_prefix = "Running with parameters from environment variables."
 
     else:
+        import argparse
+
         parser = argparse.ArgumentParser(description="Android Resource Translator")
         parser.add_argument(
             "resources_paths",

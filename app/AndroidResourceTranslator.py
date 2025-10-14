@@ -12,7 +12,7 @@ import re
 import os
 from pathlib import Path
 from collections import defaultdict
-from typing import Dict, Set, List, Tuple
+from typing import Any, Dict, Set, List, Tuple
 from lxml import etree
 from language_utils import get_language_name
 
@@ -38,6 +38,8 @@ from llm_provider import (
 
 # Maximum number of items to translate in a single batch API call
 MAX_BATCH_SIZE = 100
+# Default number of existing translation pairs/plurals to include as context
+DEFAULT_REFERENCE_CONTEXT_LIMIT = 25
 
 TRANSLATION_GUIDELINES = """\
 Follow these guidelines carefully.
@@ -803,6 +805,95 @@ def escape_special_chars(text: str) -> str:
 # ------------------------------------------------------------------------------
 
 
+def _build_reference_string_examples(
+    res: "AndroidResourceFile",
+    default_strings: Dict[str, str],
+    exclude_keys: Set[str],
+    limit: int,
+) -> List[Dict[str, str]]:
+    """
+    Collect previously translated string examples for context.
+
+    Args:
+        res: Target language resource file.
+        default_strings: Dictionary of default language strings.
+        exclude_keys: Keys currently being translated (omit from context).
+        limit: Maximum number of examples to include.
+
+    Returns:
+        A list of dictionaries containing key, source, and existing translation.
+    """
+    examples: List[Dict[str, str]] = []
+
+    for key in sorted(res.strings.keys()):
+        if key in exclude_keys:
+            continue
+
+        source_text = default_strings.get(key)
+        translation_text = res.strings.get(key)
+
+        if not source_text or not translation_text:
+            continue
+
+        examples.append(
+            {
+                "key": key,
+                "source": source_text,
+                "existing_translation": translation_text,
+            }
+        )
+
+        if len(examples) >= limit:
+            break
+
+    return examples
+
+
+def _build_reference_plural_examples(
+    res: "AndroidResourceFile",
+    default_plurals: Dict[str, Dict[str, str]],
+    exclude_names: Set[str],
+    limit: int,
+) -> List[Dict[str, Any]]:
+    """
+    Collect previously translated plural examples for context.
+
+    Args:
+        res: Target language resource file.
+        default_plurals: Default language plural definitions.
+        exclude_names: Plural resource names currently being translated.
+        limit: Maximum number of examples to include.
+
+    Returns:
+        A list of dictionaries containing plural name, default values,
+        and existing translations.
+    """
+    examples: List[Dict[str, Any]] = []
+
+    for plural_name in sorted(res.plurals.keys()):
+        if plural_name in exclude_names:
+            continue
+
+        default_quantities = default_plurals.get(plural_name)
+        existing_quantities = res.plurals.get(plural_name)
+
+        if not default_quantities or not existing_quantities:
+            continue
+
+        examples.append(
+            {
+                "plural_name": plural_name,
+                "source": dict(sorted(default_quantities.items())),
+                "existing_translation": dict(sorted(existing_quantities.items())),
+            }
+        )
+
+        if len(examples) >= limit:
+            break
+
+    return examples
+
+
 def _translate_missing_strings(
     res: AndroidResourceFile,
     missing_strings: set,
@@ -810,6 +901,8 @@ def _translate_missing_strings(
     lang: str,
     llm_config: LLMConfig,
     project_context: str,
+    include_reference_context: bool,
+    reference_context_limit: int,
 ) -> List[Dict]:
     """
     Helper function to translate missing strings for a resource file.
@@ -822,6 +915,8 @@ def _translate_missing_strings(
         lang: Target language code
         llm_config: LLM provider configuration
         project_context: Optional project context
+        include_reference_context: Whether to include existing translations as context
+        reference_context_limit: Maximum number of reference examples to include
 
     Returns:
         List of translation result dictionaries
@@ -870,14 +965,28 @@ def _translate_missing_strings(
             f"Translating batch of {len(chunk_dict)} strings (chunk {i // MAX_BATCH_SIZE + 1})"
         )
 
+        reference_examples: List[Dict[str, str]] = []
+        if include_reference_context and reference_context_limit > 0:
+            reference_examples = _build_reference_string_examples(
+                res=res,
+                default_strings=module_default_strings,
+                exclude_keys=set(chunk_keys),
+                limit=reference_context_limit,
+            )
+
+        translate_kwargs = {
+            "strings_dict": chunk_dict,
+            "system_message": system_message,
+            "user_prompt": base_prompt,
+            "llm_config": llm_config,
+        }
+
+        if include_reference_context and reference_examples:
+            translate_kwargs["reference_examples"] = reference_examples
+
         try:
             # Translate the entire batch
-            translations = translate_strings_batch_with_llm(
-                strings_dict=chunk_dict,
-                system_message=system_message,
-                user_prompt=base_prompt,
-                llm_config=llm_config,
-            )
+            translations = translate_strings_batch_with_llm(**translate_kwargs)
 
             # Process results
             for key, translated in translations.items():
@@ -913,9 +1022,12 @@ def _translate_missing_strings(
 def _translate_missing_plurals(
     res: AndroidResourceFile,
     missing_plurals: Dict[str, Dict[str, str]],
+    module_default_plurals: Dict[str, Dict[str, str]],
     lang: str,
     llm_config: LLMConfig,
     project_context: str,
+    include_reference_context: bool,
+    reference_context_limit: int,
 ) -> List[Dict]:
     """
     Helper function to translate missing plurals for a resource file.
@@ -924,9 +1036,12 @@ def _translate_missing_plurals(
     Args:
         res: Resource file to update
         missing_plurals: Dict of missing plural resources {name: {quantity: text}}
+        module_default_plurals: Dict of default plurals for the module
         lang: Target language code
         llm_config: LLM provider configuration
         project_context: Optional project context
+        include_reference_context: Whether to include existing translations as context
+        reference_context_limit: Maximum number of reference examples to include
 
     Returns:
         List of translation result dictionaries
@@ -965,14 +1080,28 @@ def _translate_missing_plurals(
             f"Translating batch of {len(chunk_dict)} plurals (chunk {i // MAX_BATCH_SIZE + 1})"
         )
 
+        reference_examples: List[Dict[str, Any]] = []
+        if include_reference_context and reference_context_limit > 0:
+            reference_examples = _build_reference_plural_examples(
+                res=res,
+                default_plurals=module_default_plurals,
+                exclude_names=set(chunk_names),
+                limit=reference_context_limit,
+            )
+
+        translate_kwargs = {
+            "plurals_dict": chunk_dict,
+            "system_message": system_message,
+            "user_prompt": base_prompt,
+            "llm_config": llm_config,
+        }
+
+        if include_reference_context and reference_examples:
+            translate_kwargs["reference_examples"] = reference_examples
+
         try:
             # Translate the entire batch
-            translations = translate_plurals_batch_with_llm(
-                plurals_dict=chunk_dict,
-                system_message=system_message,
-                user_prompt=base_prompt,
-                llm_config=llm_config,
-            )
+            translations = translate_plurals_batch_with_llm(**translate_kwargs)
 
             # Process results
             for plural_name, generated_plural in translations.items():
@@ -1076,6 +1205,8 @@ def auto_translate_resources(
     modules: Dict[str, AndroidModule],
     llm_config: LLMConfig,
     project_context: str,
+    include_reference_context: bool = True,
+    reference_context_limit: int = DEFAULT_REFERENCE_CONTEXT_LIMIT,
 ) -> dict:
     """
     For each non-default language resource, auto-translate missing strings and plural items.
@@ -1144,6 +1275,8 @@ def auto_translate_resources(
                         lang,
                         llm_config,
                         project_context,
+                        include_reference_context,
+                        reference_context_limit,
                     )
                     translation_log[module.name][lang]["strings"].extend(string_results)
                     total_translated += len(string_results)
@@ -1153,9 +1286,12 @@ def auto_translate_resources(
                     plural_results = _translate_missing_plurals(
                         res,
                         missing_plurals,
+                        module_default_plurals,
                         lang,
                         llm_config,
                         project_context,
+                        include_reference_context,
+                        reference_context_limit,
                     )
                     translation_log[module.name][lang]["plurals"].extend(plural_results)
                     total_translated += sum(
@@ -1411,8 +1547,6 @@ def main() -> None:
     Parses command-line arguments or environment variables, finds resource files,
     checks for missing translations, and auto-translates them.
     """
-    import argparse
-
     is_github = os.environ.get("GITHUB_ACTIONS", "false").lower() == "true"
     if is_github:
         resources_paths_input = os.environ.get("INPUT_RESOURCES_PATHS")
@@ -1451,6 +1585,23 @@ def main() -> None:
         )
 
         project_context = os.environ.get("INPUT_PROJECT_CONTEXT", "")
+
+        include_reference_context = (
+            os.environ.get("INPUT_INCLUDE_REFERENCE_CONTEXT", "true").lower() == "true"
+        )
+        reference_context_limit_raw = os.environ.get(
+            "INPUT_REFERENCE_CONTEXT_LIMIT", str(DEFAULT_REFERENCE_CONTEXT_LIMIT)
+        )
+        try:
+            reference_context_limit = int(reference_context_limit_raw)
+        except ValueError:
+            print(
+                f"Invalid INPUT_REFERENCE_CONTEXT_LIMIT value "
+                f"('{reference_context_limit_raw}'); falling back to "
+                f"{DEFAULT_REFERENCE_CONTEXT_LIMIT}"
+            )
+            reference_context_limit = DEFAULT_REFERENCE_CONTEXT_LIMIT
+
         ignore_folders_input = os.environ.get("INPUT_IGNORE_FOLDERS", "")
         ignore_folders = (
             [
@@ -1462,15 +1613,11 @@ def main() -> None:
             else []
         )
 
-        print(
-            "Running with parameters from environment variables. "
-            f"Resources Paths: {resources_paths}, Dry Run: {dry_run}, "
-            f"Log Trace: {log_trace}, "
-            f"LLM Provider: {llm_provider}, Model: {model}, "
-            f"Project Context: {project_context}, Ignore Folders: {ignore_folders}"
-        )
+        startup_message_prefix = "Running with parameters from environment variables."
 
     else:
+        import argparse
+
         parser = argparse.ArgumentParser(description="Android Resource Translator")
         parser.add_argument(
             "resources_paths",
@@ -1559,6 +1706,25 @@ def main() -> None:
             help="Comma separated list of folder names to ignore during scanning. "
             "If empty, .gitignore patterns will be used instead.",
         )
+        parser.add_argument(
+            "--include-reference-context",
+            dest="include_reference_context",
+            action="store_true",
+            default=None,
+            help="Include existing translations as additional context for the LLM (enabled by default).",
+        )
+        parser.add_argument(
+            "--no-include-reference-context",
+            dest="include_reference_context",
+            action="store_false",
+            help="Disable sending existing translations as context to the LLM.",
+        )
+        parser.add_argument(
+            "--reference-context-limit",
+            type=int,
+            default=DEFAULT_REFERENCE_CONTEXT_LIMIT,
+            help="Maximum number of existing translations to include as context (0 disables context).",
+        )
 
         args = parser.parse_args()
 
@@ -1581,19 +1747,43 @@ def main() -> None:
         openrouter_send_site_info = args.openrouter_send_site_info
 
         project_context = args.project_context
+        include_reference_context = (
+            args.include_reference_context
+            if args.include_reference_context is not None
+            else True
+        )
+        reference_context_limit = args.reference_context_limit
         ignore_folders = [
             folder.strip()
             for folder in args.ignore_folders.split(",")
             if folder.strip()
         ]
         # Don't print args because it will come with the API KEY
+        startup_message_prefix = "Running with command-line parameters."
+
+    if reference_context_limit < 0:
         print(
-            "Running with command-line parameters. "
-            f"Resources Paths: {resources_paths}, Dry Run: {dry_run}, "
-            f"Log Trace: {log_trace}, "
-            f"LLM Provider: {llm_provider}, Model: {model}, "
-            f"Project Context: {project_context}, Ignore Folders: {ignore_folders}"
+            f"Reference context limit {reference_context_limit} is negative; "
+            "resetting to 0 (disables context)."
         )
+        reference_context_limit = 0
+
+    should_include_reference_context = (
+        include_reference_context and reference_context_limit > 0
+    )
+
+    runtime_details = (
+        f"Resources Paths: {resources_paths}, Dry Run: {dry_run}, "
+        f"Log Trace: {log_trace}, "
+        f"LLM Provider: {llm_provider}, Model: {model}, "
+        f"Project Context: {project_context}, Ignore Folders: {ignore_folders}, "
+        f"Include Reference Context: {should_include_reference_context}, "
+        f"Reference Context Limit: {reference_context_limit}"
+    )
+    if startup_message_prefix:
+        print(f"{startup_message_prefix} {runtime_details}")
+    else:
+        print(runtime_details)
 
     configure_logging(log_trace)
 
@@ -1692,6 +1882,8 @@ def main() -> None:
             merged_modules,
             llm_config,
             project_context,
+            include_reference_context=should_include_reference_context,
+            reference_context_limit=reference_context_limit,
         )
 
     # Whether or not auto-translation was performed, still check for missing translations.

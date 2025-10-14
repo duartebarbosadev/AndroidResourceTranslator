@@ -10,7 +10,7 @@ provider-specific configurations, API endpoints, and authentication.
 import logging
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -391,7 +391,9 @@ class LLMClient:
                         response_payload = response.dict()
                     except AttributeError:
                         response_payload = str(response)
-                logger.debug("Chat completion raw response payload: %s", response_payload)
+                logger.debug(
+                    "Chat completion raw response payload: %s", response_payload
+                )
 
             # Parse response based on whether tools were used
             if tools:
@@ -568,6 +570,7 @@ def translate_strings_batch_with_llm(
     system_message: str,
     user_prompt: str,
     llm_config: LLMConfig,
+    reference_examples: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, str]:
     """
     Translate multiple strings in a single API call using batch mode.
@@ -581,6 +584,8 @@ def translate_strings_batch_with_llm(
         system_message: System prompt defining the translator's role
         user_prompt: User prompt with translation guidelines (without the strings)
         llm_config: LLM provider configuration
+        reference_examples: Optional list of existing translations from the target
+                            project to provide style/context (read-only)
 
     Returns:
         Dictionary mapping string keys to translated texts
@@ -598,11 +603,24 @@ def translate_strings_batch_with_llm(
 
     strings_json = json.dumps(strings_dict, indent=2, ensure_ascii=False)
 
+    full_user_prompt = user_prompt
+
+    if reference_examples:
+        logger.debug(
+            "Including %d reference string translations for context",
+            len(reference_examples),
+        )
+        reference_json = json.dumps(reference_examples, indent=2, ensure_ascii=False)
+        full_user_prompt += (
+            "\n\nUse the following existing translations from the target project "
+            "as context for tone and terminology. Do not modify them:\n"
+            + reference_json
+        )
+
     # Construct the full user prompt with all strings
     # Make it crystal clear that we need to translate FROM English TO the target language
-    full_user_prompt = (
-        user_prompt
-        + "\n\nTranslate ALL the strings below from English to the target language.\n"
+    full_user_prompt += (
+        "\n\nTranslate ALL the strings below from English to the target language.\n"
         + "The strings are provided as JSON key-value pairs. Translate only the values:\n"
         + strings_json
     )
@@ -667,6 +685,7 @@ def translate_plurals_batch_with_llm(
     system_message: str,
     user_prompt: str,
     llm_config: LLMConfig,
+    reference_examples: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Dict[str, str]]:
     """
     Translate multiple plural resources in a single API call using batch mode.
@@ -680,6 +699,8 @@ def translate_plurals_batch_with_llm(
         system_message: System prompt defining the translator's role
         user_prompt: User prompt with translation guidelines (without the plurals)
         llm_config: LLM provider configuration
+        reference_examples: Optional list of existing plural translations from the
+                            target project for additional context (read-only)
 
     Returns:
         Dictionary mapping plural names to their translated quantity forms
@@ -697,11 +718,23 @@ def translate_plurals_batch_with_llm(
 
     plurals_json = json.dumps(plurals_dict, indent=2, ensure_ascii=False)
 
+    full_user_prompt = user_prompt
+
+    if reference_examples:
+        logger.debug(
+            "Including %d reference plural translations for context",
+            len(reference_examples),
+        )
+        reference_json = json.dumps(reference_examples, indent=2, ensure_ascii=False)
+        full_user_prompt += (
+            "\n\nUse the following existing plural translations from the target "
+            "project as context. Do not modify them:\n" + reference_json
+        )
+
     # Construct the full user prompt with all plurals
     # Make it crystal clear that we need to translate FROM English TO the target language
-    full_user_prompt = (
-        user_prompt
-        + "\n\nTranslate ALL the plural resources below from English to the target language.\n"
+    full_user_prompt += (
+        "\n\nTranslate ALL the plural resources below from English to the target language.\n"
         + "Each plural resource has a name and quantity forms. Translate the text in each quantity form:\n"
         + plurals_json
     )

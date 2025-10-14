@@ -1768,7 +1768,7 @@ def main() -> None:
         )
         reference_context_limit = 0
 
-    include_reference_context = (
+    should_include_reference_context = (
         include_reference_context and reference_context_limit > 0
     )
 
@@ -1777,7 +1777,7 @@ def main() -> None:
         f"Log Trace: {log_trace}, "
         f"LLM Provider: {llm_provider}, Model: {model}, "
         f"Project Context: {project_context}, Ignore Folders: {ignore_folders}, "
-        f"Include Reference Context: {include_reference_context}, "
+        f"Include Reference Context: {should_include_reference_context}, "
         f"Reference Context Limit: {reference_context_limit}"
     )
     if startup_message_prefix:
@@ -1882,7 +1882,7 @@ def main() -> None:
             merged_modules,
             llm_config,
             project_context,
-            include_reference_context=include_reference_context,
+            include_reference_context=should_include_reference_context,
             reference_context_limit=reference_context_limit,
         )
 

@@ -78,6 +78,8 @@ jobs:
           #ignore_folders: "build" # Default will follow .gitignore
           #project_context: "Your project context here" # (Default is no context)
           #openrouter_send_site_info: "false" # Set to false to disable sending site info to OpenRouter
+          #include_reference_context: "false" # Disable sharing existing translations as prompt context
+          #reference_context_limit: "10" # Reduce or increase how many examples are sent
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
@@ -130,6 +132,8 @@ The action supports the following inputs:
 | **openrouter_send_site_info** | Send site URL and name to OpenRouter for rankings. Set to `"false"` to disable.                                                                                                                                                               | `"true"`                                                               | Yes      | `"true"` or `"false"`                                                  |
 | **project_context**          | Additional project context to include in translation prompts.                                                                                                                                                                                 | `""`                                                                   | Yes      | `"Android launcher application"`                                       |
 | **ignore_folders**           | Comma-separated list of folder names to ignore during resource scanning. If empty, .gitignore file will be used instead.                                                                                                                     | `""`                                                                   | Yes      | `"build,temp,cache"`                                                   |
+| **include_reference_context** | Include existing translations from the destination language as context when prompting the LLM. Set to `"false"` to disable the extra context entirely.                                                                                       | `"true"`                                                               | Yes      | `"false"`                                                              |
+| **reference_context_limit**  | Maximum number of existing translations to send as context examples. Use `"0"` to skip sending any reference strings even if context is enabled.                                                                                               | `"25"`                                                                 | Yes      | `"10"`                                                                 |
 
 ### Environment Variables (API Keys)
 

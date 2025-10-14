@@ -869,7 +869,7 @@ def _build_reference_plural_examples(
         A list of dictionaries containing plural name, default values,
         and existing translations.
     """
-    examples: List[Dict[str, Dict[str, Dict[str, str]]]] = []
+    examples: List[Dict[str, Any]] = []
 
     for plural_name in sorted(res.plurals.keys()):
         if plural_name in exclude_names:
@@ -1548,8 +1548,6 @@ def main() -> None:
     Parses command-line arguments or environment variables, finds resource files,
     checks for missing translations, and auto-translates them.
     """
-    startup_message_prefix = ""
-
     is_github = os.environ.get("GITHUB_ACTIONS", "false").lower() == "true"
     if is_github:
         resources_paths_input = os.environ.get("INPUT_RESOURCES_PATHS")

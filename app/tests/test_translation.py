@@ -245,6 +245,19 @@ class TestAutoTranslation(unittest.TestCase):
         )
         self.assertEqual(strings_payload, {"goodbye": "Goodbye"})
 
+        reference_examples = mock_translate_strings_batch.call_args.kwargs.get(
+            "reference_examples"
+        )
+        self.assertIsNotNone(reference_examples)
+        self.assertIn(
+            {
+                "key": "hello",
+                "source": "Hello World",
+                "existing_translation": "Hola Mundo",
+            },
+            reference_examples,
+        )
+
         mock_translate_plurals_batch.assert_called_once()
         plurals_payload = (
             mock_translate_plurals_batch.call_args.kwargs.get("plurals_dict")
@@ -252,6 +265,9 @@ class TestAutoTranslation(unittest.TestCase):
         )
         self.assertEqual(
             plurals_payload, {"days": {"one": "%d day", "other": "%d days"}}
+        )
+        self.assertIsNone(
+            mock_translate_plurals_batch.call_args.kwargs.get("reference_examples")
         )
 
         # Verify file updates

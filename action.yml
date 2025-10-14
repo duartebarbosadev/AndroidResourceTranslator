@@ -53,6 +53,14 @@ inputs:
     description: "Comma-separated list of folder names to ignore during resource scanning (e.g., build)."
     required: false
     default: ""
+  include_reference_context:
+    description: "Include existing translations from the target language as context for the LLM. Set to 'false' to disable."
+    required: false
+    default: "true"
+  reference_context_limit:
+    description: "Maximum number of existing translations to include as context (0 disables context)."
+    required: false
+    default: "25"
 
 outputs:
   translation_report:

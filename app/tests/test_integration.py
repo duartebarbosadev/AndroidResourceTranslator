@@ -130,6 +130,11 @@ class TestResourceFindingAndTranslation(TestIntegration):
         mock_translate_batch.assert_called_once()
         batch_kwargs = mock_translate_batch.call_args.kwargs
         self.assertIn("welcome", batch_kwargs.get("strings_dict", {}))
+        reference_examples = batch_kwargs.get("reference_examples")
+        self.assertIsNotNone(reference_examples)
+        self.assertTrue(
+            any(example.get("key") == "app_name" for example in reference_examples)
+        )
 
         # Verify resource was updated
         self.assertIn("welcome", es_res.strings)

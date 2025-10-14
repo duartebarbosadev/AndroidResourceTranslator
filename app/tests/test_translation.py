@@ -17,8 +17,6 @@ from unittest.mock import patch, MagicMock
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from AndroidResourceTranslator import (
-    translate_text,
-    translate_plural_text,
     auto_translate_resources,
     AndroidModule,
     escape_apostrophes,
@@ -170,260 +168,16 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
                 result = escape_special_chars(input_text)
                 self.assertEqual(result, expected)
 
-    def test_escape_apostrophes_integration_with_translate_text(self):
-        """Test that translate_text properly escapes apostrophes in results."""
-        with patch(
-            "AndroidResourceTranslator.translate_with_llm"
-        ) as mock_translate_with_llm:
-            # Configure mock to return text with apostrophes
-            mock_translate_with_llm.return_value = (
-                "Si us plau, activa Scrolless a la configuració d'accessibilitat."
-            )
+    def test_escape_special_chars_preserves_html_markup(self):
+        """Ensure escaping preserves inline HTML markup and attributes."""
+        simple_html = 'Visit our <a href="https://test.com">website</a> for more info'
+        self.assertEqual(escape_special_chars(simple_html), simple_html)
 
-            # Create LLMConfig
-            llm_config = LLMConfig(
-                provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
-            )
-
-            # Execute the function
-            result = translate_text(
-                "Please enable Scrolless in accessibility settings.",
-                target_language="ca",
-                llm_config=llm_config,
-                project_context="",
-            )
-
-            # Verify results - apostrophes should be escaped
-            self.assertEqual(
-                result,
-                "Si us plau, activa Scrolless a la configuració d\\'accessibilitat.",
-            )
-
-    def test_escape_special_chars_integration_with_translate_text(self):
-        """Test that translate_text properly escapes all special characters in results."""
-        with patch(
-            "AndroidResourceTranslator.translate_with_llm"
-        ) as mock_translate_with_llm:
-            # Configure mock to return text with multiple special characters
-            mock_translate_with_llm.return_value = (
-                'Mensaje con "comillas", apóstrofo\', 25% y usuario@ejemplo.com'
-            )
-
-            # Create LLMConfig
-            llm_config = LLMConfig(
-                provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
-            )
-
-            # Execute the function
-            result = translate_text(
-                'Message with "quotes", apostrophe\', 25% and user@example.com',
-                target_language="es",
-                llm_config=llm_config,
-                project_context="",
-            )
-
-            # Verify results - all special characters should be escaped
-            self.assertEqual(
-                result,
-                'Mensaje con \\"comillas\\", apóstrofo\\\', 25\\% y usuario\\@ejemplo.com',
-            )
-
-    def test_escape_apostrophes_integration_with_translate_plural_text(self):
-        """Test that translate_plural_text properly escapes apostrophes in results."""
-        with patch(
-            "AndroidResourceTranslator.translate_plural_with_llm"
-        ) as mock_translate_plural_with_llm:
-            # Configure mock with JSON plural response containing apostrophes
-            mock_translate_plural_with_llm.return_value = {
-                "one": "%d element d'accessibilitat",
-                "other": "%d elements d'accessibilitat",
-            }
-
-            # Create LLMConfig
-            llm_config = LLMConfig(
-                provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
-            )
-
-            # Execute the function
-            source_plural = {
-                "one": "%d accessibility item",
-                "other": "%d accessibility items",
-            }
-            result = translate_plural_text(
-                source_plural,
-                target_language="ca",
-                llm_config=llm_config,
-                project_context="",
-            )
-
-            # Verify results - apostrophes should be escaped in all plural forms
-            self.assertEqual(result["one"], "%d element d\\'accessibilitat")
-            self.assertEqual(result["other"], "%d elements d\\'accessibilitat")
-
-    def test_escape_special_chars_integration_with_translate_plural_text(self):
-        """Test that translate_plural_text properly escapes all special characters in results."""
-        with patch(
-            "AndroidResourceTranslator.translate_plural_with_llm"
-        ) as mock_translate_plural_with_llm:
-            # Configure mock with JSON plural response containing multiple special characters
-            mock_translate_plural_with_llm.return_value = {
-                "one": '%d "elemento" al 50% en mi@correo',
-                "other": '%d "elementos" al 50% en mi@correo',
-            }
-
-            # Create LLMConfig
-            llm_config = LLMConfig(
-                provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
-            )
-
-            # Execute the function
-            source_plural = {
-                "one": '%d "item" at 50% in my@email',
-                "other": '%d "items" at 50% in my@email',
-            }
-            result = translate_plural_text(
-                source_plural,
-                target_language="es",
-                llm_config=llm_config,
-                project_context="",
-            )
-
-            # Verify results - all special characters should be escaped in all plural forms
-            self.assertEqual(result["one"], '%d \\"elemento\\" al 50\\% en mi\\@correo')
-            self.assertEqual(
-                result["other"], '%d \\"elementos\\" al 50\\% en mi\\@correo'
-            )
-
-
-@patch("AndroidResourceTranslator.translate_with_llm")
-class TestTranslation(unittest.TestCase):
-    """Tests for core translation functionality with mocked LLM API calls."""
-
-    def test_translate_text(self, mock_translate_with_llm):
-        """Test translating a simple string with expected parameters."""
-        # Configure mock
-        mock_translate_with_llm.return_value = "Hola Mundo"
-
-        # Create LLMConfig
-        llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+        complex_html = "Don't miss our <a href='https://test.com'>sale</a> at 50% off"
+        expected_complex = (
+            'Don\\\'t miss our <a href="https://test.com">sale</a> at 50\\% off'
         )
-
-        # Execute the function
-        result = translate_text(
-            "Hello World",
-            target_language="es",
-            llm_config=llm_config,
-            project_context="",
-        )
-
-        # Verify results
-        self.assertEqual(result, "Hola Mundo")
-        mock_translate_with_llm.assert_called_once()
-
-        # Verify API call parameters
-        args = mock_translate_with_llm.call_args
-        self.assertIn(
-            "Hello World", args[0][0]
-        )  # Check text argument contains source text
-        self.assertEqual(args[0][3], llm_config)  # Check correct LLMConfig
-
-    def test_translate_text_empty_string(self, mock_translate_with_llm):
-        """Test that empty strings are not sent to the API."""
-        # Create LLMConfig
-        llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
-        )
-
-        # Execute the function with empty input
-        result = translate_text("", "es", llm_config, "")
-
-        # Verify results
-        self.assertEqual(result, "")
-        mock_translate_with_llm.assert_not_called()
-
-    def test_translate_text_with_context(self, mock_translate_with_llm):
-        """Test translating with project context included."""
-        # Configure mock
-        mock_translate_with_llm.return_value = "Hola Mundo"
-
-        # Create LLMConfig
-        llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
-        )
-
-        # Execute with project context
-        result = translate_text(
-            "Hello World",
-            target_language="es",
-            llm_config=llm_config,
-            project_context="A test application",
-        )
-
-        # Verify results
-        self.assertEqual(result, "Hola Mundo")
-
-        # Verify project context was included
-        args = mock_translate_with_llm.call_args
-        self.assertIn("A test application", args[0][1])  # Context in system message
-
-    def test_translate_plural_text(self, mock_translate_with_llm):
-        """Test translating a plural resource with proper JSON response."""
-        # The test needs to mock translate_plural_with_llm instead for plural translations
-        # Configure mock with proper plural dict response
-        with patch(
-            "AndroidResourceTranslator.translate_plural_with_llm"
-        ) as mock_translate_plural:
-            mock_translate_plural.return_value = {
-                "one": "%d elemento",
-                "other": "%d elementos",
-            }
-
-            # Create LLMConfig
-            llm_config = LLMConfig(
-                provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
-            )
-
-            # Execute the function
-            source_plural = {"one": "%d item", "other": "%d items"}
-            result = translate_plural_text(
-                source_plural,
-                target_language="es",
-                llm_config=llm_config,
-                project_context="",
-            )
-
-            # Verify results
-            self.assertEqual(result["one"], "%d elemento")
-            self.assertEqual(result["other"], "%d elementos")
-            mock_translate_plural.assert_called_once()
-
-    def test_translate_plural_text_error(self, mock_translate_with_llm):
-        """Test error handling when LLM API fails."""
-        # Configure mock to raise exception for plural translations
-        with patch(
-            "AndroidResourceTranslator.translate_plural_with_llm"
-        ) as mock_translate_plural:
-            mock_translate_plural.side_effect = Exception("API error")
-
-            # Create LLMConfig
-            llm_config = LLMConfig(
-                provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
-            )
-
-            # Execute and verify exception propagation
-            source_plural = {"one": "%d item", "other": "%d items"}
-            with self.assertRaises(Exception) as context:
-                translate_plural_text(
-                    source_plural,
-                    target_language="es",
-                    llm_config=llm_config,
-                    project_context="",
-                )
-
-            # Verify exception details
-            self.assertIn("API error", str(context.exception))
-            mock_translate_plural.assert_called_once()
+        self.assertEqual(escape_special_chars(complex_html), expected_complex)
 
 
 class TestAutoTranslation(unittest.TestCase):
@@ -455,16 +209,21 @@ class TestAutoTranslation(unittest.TestCase):
         # Build modules dict
         self.modules = {"test_id": self.module}
 
-    @patch("AndroidResourceTranslator.translate_text")
-    @patch("AndroidResourceTranslator.translate_plural_text")
+    @patch("AndroidResourceTranslator.translate_plurals_batch_with_llm")
+    @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
     @patch("AndroidResourceTranslator.update_xml_file")
     def test_auto_translate(
-        self, mock_update_xml, mock_translate_plural, mock_translate_text
+        self,
+        mock_update_xml,
+        mock_translate_strings_batch,
+        mock_translate_plurals_batch,
     ):
         """Test complete auto-translation workflow."""
         # Configure mocks
-        mock_translate_text.return_value = "Adiós"
-        mock_translate_plural.return_value = {"one": "%d día", "other": "%d días"}
+        mock_translate_strings_batch.return_value = {"goodbye": "Adiós"}
+        mock_translate_plurals_batch.return_value = {
+            "days": {"one": "%d día", "other": "%d días"}
+        }
 
         # Create LLMConfig
         llm_config = LLMConfig(
@@ -479,16 +238,20 @@ class TestAutoTranslation(unittest.TestCase):
         )
 
         # Verify translation calls
-        mock_translate_text.assert_called_once_with(
-            "Goodbye",
-            target_language="es",
-            llm_config=llm_config,
-            project_context="Test project",
+        mock_translate_strings_batch.assert_called_once()
+        strings_payload = (
+            mock_translate_strings_batch.call_args.kwargs.get("strings_dict")
+            or mock_translate_strings_batch.call_args.args[0]
         )
+        self.assertEqual(strings_payload, {"goodbye": "Goodbye"})
 
-        mock_translate_plural.assert_called_once()
+        mock_translate_plurals_batch.assert_called_once()
+        plurals_payload = (
+            mock_translate_plurals_batch.call_args.kwargs.get("plurals_dict")
+            or mock_translate_plurals_batch.call_args.args[0]
+        )
         self.assertEqual(
-            mock_translate_plural.call_args[0][0], {"one": "%d day", "other": "%d days"}
+            plurals_payload, {"days": {"one": "%d day", "other": "%d days"}}
         )
 
         # Verify file updates

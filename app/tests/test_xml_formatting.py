@@ -11,12 +11,11 @@ import sys
 import unittest
 from pathlib import Path
 import tempfile
-import xml.etree.ElementTree as ET
 
 # Add parent directory to path for module import
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from AndroidResourceTranslator import AndroidResourceFile, update_xml_file, indent_xml
+from AndroidResourceTranslator import AndroidResourceFile, update_xml_file
 
 
 class TestXmlFormatting(unittest.TestCase):
@@ -119,34 +118,6 @@ class TestXmlFormatting(unittest.TestCase):
             self.assertIn('<plurals name="new_plural">', updated_content)
             self.assertIn('<item quantity="one">1 new item</item>', updated_content)
             self.assertIn('<item quantity="other">%d new items</item>', updated_content)
-
-    def test_indent_xml_function(self):
-        """Test the indent_xml function for proper element indentation."""
-        # Create a simple XML structure
-        root = ET.Element("resources")
-        string_elem = ET.SubElement(root, "string")
-        string_elem.set("name", "test")
-        string_elem.text = "Test Value"
-
-        plurals_elem = ET.SubElement(root, "plurals")
-        plurals_elem.set("name", "test_plural")
-        item1 = ET.SubElement(plurals_elem, "item")
-        item1.set("quantity", "one")
-        item1.text = "1 item"
-        item2 = ET.SubElement(plurals_elem, "item")
-        item2.set("quantity", "other")
-        item2.text = "%d items"
-
-        # Apply indentation
-        indent_xml(root)
-
-        # Convert to string
-        xml_str = ET.tostring(root, encoding="unicode")
-
-        # Verify indentation structure
-        self.assertIn("\n    <string", xml_str)
-        self.assertIn("\n    <plurals", xml_str)
-        self.assertIn("\n        <item", xml_str)
 
 
 if __name__ == "__main__":

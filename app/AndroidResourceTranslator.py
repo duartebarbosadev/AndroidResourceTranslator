@@ -8,11 +8,9 @@ reports missing translations, and can automatically translate missing entries us
 
 import logging
 import sys
-import json
 import re
 import os
 from pathlib import Path
-from xml.etree import ElementTree
 from collections import defaultdict
 from typing import Dict, Set, List, Tuple
 from lxml import etree
@@ -30,13 +28,17 @@ from git_utils import (
 from llm_provider import (
     LLMProvider,
     LLMConfig,
-    translate_with_llm,
-    translate_plural_with_llm,
+    translate_strings_batch_with_llm,
+    translate_plurals_batch_with_llm,
 )
 
 # ------------------------------------------------------------------------------
 # Translation Prompt Constants
 # ------------------------------------------------------------------------------
+
+# Maximum number of items to translate in a single batch API call
+MAX_BATCH_SIZE = 100
+
 TRANSLATION_GUIDELINES = """\
 Follow these guidelines carefully.
 **Purpose & Context:**  
@@ -70,7 +72,7 @@ For idiomatic expressions or culturally-charged phrases, that there's no direct 
 Make sure to keep the translation within a reasonable size, not exceeding 20% of the original text length. If the translation is significantly longer, and if possible consider rephrasing or simplifying it while maintaining the original meaning.
 
 **Tone and Formality Consistency:**
-Maintain consistent formality throughout the translation based on these principles:
+  Maintain consistent formality throughout ALL translations based on these principles:
 - Default to a conversational but respectful tone appropriate for a consumer android app
 - Match the formality level commonly used in popular, well-localized android apps in the target language
 - Use direct address forms (equivalent to "you" in English) that feel natural in the target language
@@ -137,6 +139,70 @@ Translate the following string provided after the dashed line to language: {targ
 logger = logging.getLogger(__name__)
 
 
+def _create_secure_fragment_parser() -> etree.XMLParser:
+    """Return an XML parser configured to avoid external entity resolution."""
+    return etree.XMLParser(
+        resolve_entities=False,
+        no_network=True,
+        dtd_validation=False,
+        load_dtd=False,
+        recover=False,
+    )
+
+
+def _normalize_inner_xml(text: str) -> str:
+    """Normalize inner XML content for comparison."""
+    if text is None:
+        return ""
+    return text.strip()
+
+
+def _serialize_inner_xml(element) -> str:
+    """Serialize the inner XML of an element, preserving nested markup."""
+    segments: List[str] = []
+
+    if element.text:
+        segments.append(element.text)
+
+    for child in element:
+        segments.append(etree.tostring(child, encoding="unicode", with_tail=False))
+        if child.tail:
+            segments.append(child.tail)
+
+    return _normalize_inner_xml("".join(segments))
+
+
+def _set_element_inner_xml(element, content: str) -> None:
+    """Replace an element's inner XML while keeping nested markup intact."""
+    # Remove existing children
+    for child in list(element):
+        element.remove(child)
+
+    if content is None:
+        element.text = None
+        return
+
+    content = content.strip()
+
+    if not content:
+        element.text = ""
+        return
+
+    try:
+        parser = _create_secure_fragment_parser()
+        wrapper = etree.fromstring(
+            f"<__wrapper__>{content}</__wrapper__>", parser=parser
+        )
+    except etree.XMLSyntaxError:
+        element.text = content
+        return
+
+    element.text = wrapper.text
+
+    for child in wrapper:
+        element.append(child)
+
+
 def configure_logging(trace: bool) -> None:
     """Configure logging to console and optionally to a file."""
     log_level = logging.DEBUG if trace else logging.INFO
@@ -168,7 +234,8 @@ class AndroidResourceFile:
     def parse_file(self) -> None:
         """Parses the strings.xml file and extracts <string> and <plurals> elements. Skips resources with translatable="false"."""
         try:
-            tree = ElementTree.parse(self.path)
+            parser = etree.XMLParser(remove_blank_text=False)
+            tree = etree.parse(str(self.path), parser)
             root = tree.getroot()
             for elem in root:
                 translatable = elem.attrib.get("translatable", "true").lower()
@@ -178,7 +245,8 @@ class AndroidResourceFile:
                 if elem.tag == "string":
                     name = elem.attrib.get("name")
                     if name:
-                        self.strings[name] = (elem.text or "").strip()
+                        full_text = _serialize_inner_xml(elem)
+                        self.strings[name] = full_text
                 elif elem.tag == "plurals":
                     name = elem.attrib.get("name")
                     if name:
@@ -186,12 +254,13 @@ class AndroidResourceFile:
                         for item in elem.findall("item"):
                             quantity = item.attrib.get("quantity")
                             if quantity:
-                                quantities[quantity] = (item.text or "").strip()
+                                full_text = _serialize_inner_xml(item)
+                                quantities[quantity] = full_text
                         self.plurals[name] = quantities
             logger.debug(
                 f"Parsed {len(self.strings)} strings and {len(self.plurals)} plurals from {self.path}"
             )
-        except ElementTree.ParseError as pe:
+        except etree.XMLSyntaxError as pe:
             logger.error(f"XML parse error in {self.path}: {pe}")
             raise
         except Exception as e:
@@ -454,17 +523,19 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
 
     # Process each string resource
     for key, translation in resource.strings.items():
+        normalized_translation = _normalize_inner_xml(translation)
+
         if key in existing_string_elements:
-            # Update existing string if the text has changed
-            if existing_string_elements[key].text != translation:
-                existing_string_elements[key].text = translation
+            current_value = _serialize_inner_xml(existing_string_elements[key])
+            if _normalize_inner_xml(current_value) != normalized_translation:
+                _set_element_inner_xml(existing_string_elements[key], translation)
                 logger.debug(
                     f"Updated <string name='{key}'> element in {resource.path}"
                 )
         else:
             # Create and append a new string element
             new_elem = etree.Element("string", name=key)
-            new_elem.text = translation
+            _set_element_inner_xml(new_elem, translation)
             new_elem.tail = "\n" + sample_indent
             root.append(new_elem)
             logger.debug(f"Appended <string name='{key}'> element to {resource.path}")
@@ -498,17 +569,18 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
 
         # Process each quantity variation
         for qty, translation in items.items():
+            normalized_translation = _normalize_inner_xml(translation)
             if qty in existing_quantity_items:
-                # Update existing item if text has changed
-                if existing_quantity_items[qty].text != translation:
-                    existing_quantity_items[qty].text = translation
+                current_value = _serialize_inner_xml(existing_quantity_items[qty])
+                if _normalize_inner_xml(current_value) != normalized_translation:
+                    _set_element_inner_xml(existing_quantity_items[qty], translation)
                     logger.debug(
                         f"Updated plural '{plural_name}' quantity '{qty}' in {resource.path}"
                     )
             else:
                 # Create and append a new item element
                 new_item = etree.Element("item", quantity=qty)
-                new_item.text = translation
+                _set_element_inner_xml(new_item, translation)
                 new_item.tail = "\n" + item_indent
                 plural_elem.append(new_item)
                 logger.debug(
@@ -551,55 +623,6 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
     except Exception as e:
         logger.error(f"Error writing XML file {resource.path}: {e}")
         raise
-
-
-def indent_xml(elem: ElementTree.Element, level: int = 0) -> None:
-    """
-    Recursively indent an XML element tree for pretty-printing.
-
-    This utility function adds appropriate indentation to an XML element tree,
-    making the XML output more readable by humans. It works by modifying the
-    text and tail attributes of each element to include newlines and spaces.
-
-    The function handles both container elements (with children) and leaf elements
-    (without children) differently to ensure proper formatting:
-    - Container elements get their children indented one level deeper
-    - The last child in a container receives special formatting for its tail
-    - Leaf elements get proper indentation for their tail content
-
-    Args:
-        elem: The XML element to indent
-        level: The current indentation level (0 for root element)
-
-    Returns:
-        None - the element tree is modified in place
-    """
-    pad = "    "  # Standard 4 spaces per indentation level
-
-    # Elements with children need special handling
-    if len(elem):
-        # Indent the text immediately inside the opening tag if it's just whitespace
-        if not elem.text or not elem.text.strip():
-            elem.text = "\n" + (level + 1) * pad
-
-        # Process all children except the last one
-        for child in elem[:-1]:
-            # Recursively indent the child
-            indent_xml(child, level + 1)
-            # Add appropriate indentation after the child's closing tag
-            if not child.tail or not child.tail.strip():
-                child.tail = "\n" + (level + 1) * pad
-
-        # Handle the last child specially
-        indent_xml(elem[-1], level + 1)
-        # Indent after the last child's closing tag (one level less)
-        if not elem[-1].tail or not elem[-1].tail.strip():
-            elem[-1].tail = "\n" + level * pad
-
-    # For elements without children, just handle the tail if we're not at the root
-    else:
-        if level and (not elem.tail or not elem.tail.strip()):
-            elem.tail = "\n" + level * pad
 
 
 # ------------------------------------------------------------------------------
@@ -717,130 +740,39 @@ def escape_special_chars(text: str) -> str:
     if not text:
         return text
 
-    # Apply each escape function in sequence
-    text = escape_apostrophes(text)
-    text = escape_percent(text)
-    text = escape_double_quotes(text)
-    text = escape_at_symbol(text)
+    def _escape_plain(chunk: str) -> str:
+        if not chunk:
+            return chunk
+        chunk = escape_apostrophes(chunk)
+        chunk = escape_percent(chunk)
+        chunk = escape_double_quotes(chunk)
+        chunk = escape_at_symbol(chunk)
+        return chunk
 
-    return text
+    def _escape_fragment(node) -> None:
+        if node.text:
+            node.text = _escape_plain(node.text)
+        for child in node:
+            _escape_fragment(child)
+            if child.tail:
+                child.tail = _escape_plain(child.tail)
 
+    # Detect potential markup to avoid corrupting attributes
+    contains_markup = "<" in text and ">" in text
 
-def translate_text(
-    text: str, target_language: str, llm_config: LLMConfig, project_context: str
-) -> str:
-    """
-    Translate a single string resource to the target language using the configured LLM provider.
+    if contains_markup:
+        try:
+            parser = _create_secure_fragment_parser()
+            wrapper = etree.fromstring(
+                f"<__wrapper__>{text}</__wrapper__>", parser=parser
+            )
+            _escape_fragment(wrapper)
+            return _serialize_inner_xml(wrapper)
+        except etree.XMLSyntaxError:
+            # Fall back to plain escaping if content isn't valid XML
+            pass
 
-    This function handles the translation of a simple text string (typically from an
-    Android string resource) to the specified target language. It builds a prompt
-    using the translation guidelines, sends it to the LLM API, and returns the
-    translated result.
-
-    The translation follows specific guidelines for mobile UI strings, maintaining
-    proper formatting, placeholders, and Android-specific requirements. If project
-    context is provided, it's included to help provide more accurate translations.
-
-    Args:
-        text: The source text to translate
-        target_language: The target language code (e.g., "es", "fr", "zh-rCN")
-        llm_config: LLM provider configuration (provider, API key, model, etc.)
-        project_context: Optional additional context about the project
-
-    Returns:
-        The translated text in the target language
-
-    Note:
-        Empty strings are returned as-is without calling the API
-    """
-    # Don't process empty strings
-    if text.strip() == "":
-        return ""
-
-    # Get the language name for better context in prompts
-    language_name = get_language_name(target_language)
-
-    # Build the prompt with translation guidelines and the source text
-    prompt = (
-        TRANSLATION_GUIDELINES
-        + TRANSLATE_FINAL_TEXT.format(target_language=language_name)
-        + text
-    )
-
-    # Configure the system message for the API call
-    system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=language_name)
-    if project_context:
-        system_message += f"\nProject context: {project_context}"
-
-    # Call LLM API to get the translation
-    translated = translate_with_llm(text, system_message, prompt, llm_config)
-
-    # Ensure all special characters are properly escaped
-    translated = escape_special_chars(translated)
-
-    return translated
-
-
-def translate_plural_text(
-    source_plural: Dict[str, str],
-    target_language: str,
-    llm_config: LLMConfig,
-    project_context: str,
-) -> Dict[str, str]:
-    """
-    Translate Android plural resources to the target language using the configured LLM provider.
-
-    This function handles the translation of plural string resources, which require
-    special handling because different languages have different plural forms. For
-    example, English typically has two forms (singular/plural), while Slavic languages
-    may have multiple forms for different quantities.
-
-    The function uses function calling with structured outputs to guarantee
-    the returned data matches the expected schema (no JSON parsing errors).
-
-    Args:
-        source_plural: Dictionary mapping plural quantity keys to strings
-                      (e.g., {"one": "%d day", "other": "%d days"})
-        target_language: The target language code (e.g., "es", "fr", "zh-rCN")
-        llm_config: LLM provider configuration (provider, API key, model, etc.)
-        project_context: Optional additional context about the project
-
-    Returns:
-        Dictionary mapping plural quantity keys to translated strings
-
-    Raises:
-        Exception: For any API-related errors
-    """
-    # Convert source plural forms to JSON format for the prompt
-    source_json = json.dumps(source_plural, indent=2)
-
-    # Get the language name for better context in prompts
-    language_name = get_language_name(target_language)
-
-    # Build the prompt with both standard and plural-specific guidelines
-    prompt = (
-        TRANSLATION_GUIDELINES
-        + PLURAL_GUIDELINES_ADDITION
-        + TRANSLATE_FINAL_TEXT.format(target_language=target_language)
-        + source_json
-    )
-
-    # Configure the system message for the API call
-    system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=language_name)
-    if project_context:
-        system_message += f"\nProject context: {project_context}"
-
-    # Call LLM API to get the translation
-    # translate_plural_with_llm now returns a Dict directly (no JSON parsing needed!)
-    plural_dict = translate_plural_with_llm(
-        source_json, system_message, prompt, llm_config
-    )
-
-    # Ensure all special characters are properly escaped in all plural forms
-    for quantity, text in plural_dict.items():
-        plural_dict[quantity] = escape_special_chars(text)
-
-    return plural_dict
+    return _escape_plain(text)
 
 
 # ------------------------------------------------------------------------------
@@ -859,42 +791,97 @@ def _translate_missing_strings(
     """
     Helper function to translate missing strings for a resource file.
     Returns a list of translation results.
+
+    Args:
+        res: Resource file to update
+        missing_strings: Set of missing string keys to translate
+        module_default_strings: Dict of all default strings
+        lang: Target language code
+        llm_config: LLM provider configuration
+        project_context: Optional project context
+
+    Returns:
+        List of translation result dictionaries
     """
     results = []
+
+    # Filter out empty strings first
+    non_empty_strings = {
+        key: module_default_strings[key]
+        for key in sorted(missing_strings)
+        if module_default_strings[key].strip() != ""
+    }
+
+    # Handle empty strings separately
     for key in sorted(missing_strings):
-        source_text = module_default_strings[key]
-        # Skip empty strings
-        if source_text.strip() == "":
+        if module_default_strings[key].strip() == "":
             res.strings[key] = ""
-            continue
+
+    if not non_empty_strings:
+        return results
+
+    # Get the language name for prompts
+    language_name = get_language_name(lang)
+
+    # Build the base prompt (without specific strings)
+    base_prompt = TRANSLATION_GUIDELINES + TRANSLATE_FINAL_TEXT.format(
+        target_language=language_name
+    )
+
+    # Configure the system message
+    system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=language_name)
+    if project_context:
+        system_message += f"\nProject context: {project_context}"
+
+    logger.info(
+        f"Translating {len(non_empty_strings)} strings for {lang} using batch mode"
+    )
+
+    # Split into chunks if needed
+    string_keys = list(non_empty_strings.keys())
+    for i in range(0, len(string_keys), MAX_BATCH_SIZE):
+        chunk_keys = string_keys[i : i + MAX_BATCH_SIZE]
+        chunk_dict = {key: non_empty_strings[key] for key in chunk_keys}
+
+        logger.info(
+            f"Translating batch of {len(chunk_dict)} strings (chunk {i // MAX_BATCH_SIZE + 1})"
+        )
 
         try:
-            # Translate the string
-            translated = translate_text(
-                source_text,
-                target_language=lang,
+            # Translate the entire batch
+            translations = translate_strings_batch_with_llm(
+                strings_dict=chunk_dict,
+                system_message=system_message,
+                user_prompt=base_prompt,
                 llm_config=llm_config,
-                project_context=project_context,
             )
 
-            logger.info(
-                f"Translated string '{key}' to {lang}: '{source_text}' -> '{translated}'"
-            )
+            # Process results
+            for key, translated in translations.items():
+                source_text = chunk_dict[key]
 
-            # Update the resource
-            res.strings[key] = translated
-            res.modified = True
+                # Ensure special characters are escaped
+                translated = escape_special_chars(translated)
 
-            # Add to results
-            results.append(
-                {
-                    "key": key,
-                    "source": source_text,
-                    "translation": translated,
-                }
-            )
+                logger.info(
+                    f"Translated string '{key}' to {lang}: '{source_text}' -> '{translated}'"
+                )
+
+                # Update the resource
+                res.strings[key] = translated
+                res.modified = True
+
+                # Add to results
+                results.append(
+                    {
+                        "key": key,
+                        "source": source_text,
+                        "translation": translated,
+                    }
+                )
+
         except Exception as e:
-            logger.error(f"Error translating string '{key}': {e}")
+            logger.error(f"Error translating string batch: {e}")
             raise
 
     return results
@@ -910,38 +897,88 @@ def _translate_missing_plurals(
     """
     Helper function to translate missing plurals for a resource file.
     Returns a list of translation results.
+
+    Args:
+        res: Resource file to update
+        missing_plurals: Dict of missing plural resources {name: {quantity: text}}
+        lang: Target language code
+        llm_config: LLM provider configuration
+        project_context: Optional project context
+
+    Returns:
+        List of translation result dictionaries
     """
     results = []
-    for plural_name, default_map in missing_plurals.items():
-        current_map = res.plurals.get(plural_name, {})
+
+    if not missing_plurals:
+        return results
+
+    # Get the language name for prompts
+    language_name = get_language_name(lang)
+
+    # Build the base prompt (without specific plurals)
+    base_prompt = (
+        TRANSLATION_GUIDELINES
+        + PLURAL_GUIDELINES_ADDITION
+        + TRANSLATE_FINAL_TEXT.format(target_language=language_name)
+    )
+
+    # Configure the system message
+    system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=language_name)
+    if project_context:
+        system_message += f"\nProject context: {project_context}"
+
+    logger.info(
+        f"Translating {len(missing_plurals)} plurals for {lang} using batch mode"
+    )
+
+    # Split into chunks if needed
+    plural_names = list(missing_plurals.keys())
+    for i in range(0, len(plural_names), MAX_BATCH_SIZE):
+        chunk_names = plural_names[i : i + MAX_BATCH_SIZE]
+        chunk_dict = {name: missing_plurals[name] for name in chunk_names}
+
+        logger.info(
+            f"Translating batch of {len(chunk_dict)} plurals (chunk {i // MAX_BATCH_SIZE + 1})"
+        )
+
         try:
-            # Generate plural translations
-            generated_plural = translate_plural_text(
-                default_map,
-                target_language=lang,
+            # Translate the entire batch
+            translations = translate_plurals_batch_with_llm(
+                plurals_dict=chunk_dict,
+                system_message=system_message,
+                user_prompt=base_prompt,
                 llm_config=llm_config,
-                project_context=project_context,
             )
 
-            # Merge with existing translations
-            merged = generated_plural.copy()
-            merged.update(current_map)
-            res.plurals[plural_name] = merged
-            res.modified = True
+            # Process results
+            for plural_name, generated_plural in translations.items():
+                current_map = res.plurals.get(plural_name, {})
 
-            logger.info(
-                f"Translated plural group '{plural_name}' for language '{lang}': {res.plurals[plural_name]}"
-            )
+                # Ensure special characters are escaped
+                for quantity, text in generated_plural.items():
+                    generated_plural[quantity] = escape_special_chars(text)
 
-            # Add to results
-            results.append(
-                {
-                    "plural_name": plural_name,
-                    "translations": res.plurals[plural_name],
-                }
-            )
+                # Merge with existing translations
+                merged = generated_plural.copy()
+                merged.update(current_map)
+                res.plurals[plural_name] = merged
+                res.modified = True
+
+                logger.info(
+                    f"Translated plural group '{plural_name}' for language '{lang}': {res.plurals[plural_name]}"
+                )
+
+                # Add to results
+                results.append(
+                    {
+                        "plural_name": plural_name,
+                        "translations": res.plurals[plural_name],
+                    }
+                )
+
         except Exception as e:
-            logger.error(f"Error translating plural '{plural_name}': {e}")
+            logger.error(f"Error translating plural batch: {e}")
             raise
 
     return results
@@ -1020,6 +1057,11 @@ def auto_translate_resources(
     """
     For each non-default language resource, auto-translate missing strings and plural items.
     Returns a translation_log dictionary with details of the translations performed.
+
+    Args:
+        modules: Dictionary of Android modules to process
+        llm_config: LLM provider configuration
+        project_context: Optional project context for translations
     """
     translation_log = {}
     total_translated = 0
@@ -1521,7 +1563,6 @@ def main() -> None:
             for folder in args.ignore_folders.split(",")
             if folder.strip()
         ]
-
         # Don't print args because it will come with the API KEY
         print(
             "Running with command-line parameters. "

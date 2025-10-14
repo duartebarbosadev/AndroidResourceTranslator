@@ -207,10 +207,33 @@ def configure_logging(trace: bool) -> None:
     """Configure logging to console and optionally to a file."""
     log_level = logging.DEBUG if trace else logging.INFO
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
+
+    # Configure the root logger so every module shares the same handlers/level.
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    if not root_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
+        root_logger.addHandler(handler)
+    else:
+        for existing_handler in root_logger.handlers:
+            existing_handler.setFormatter(formatter)
+
+    # Keep this module logger aligned with the configured level.
     logger.setLevel(log_level)
-    logger.addHandler(handler)
+
+    # Suppress noisy debug logs from HTTP client/SDK libraries unless they escalate.
+    noisy_loggers = [
+        "openai",
+        "openai._base_client",
+        "openai._http_client",
+        "httpx",
+        "httpcore",
+    ]
+    for name in noisy_loggers:
+        noisy_logger = logging.getLogger(name)
+        noisy_logger.setLevel(logging.WARNING)
 
 
 # ------------------------------------------------------------------------------

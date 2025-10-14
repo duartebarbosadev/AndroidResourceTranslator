@@ -335,6 +335,40 @@ class LLMClient:
                 **kwargs,
             }
 
+            if logger.isEnabledFor(logging.DEBUG):
+                try:
+                    sanitized_messages = []
+                    for message in messages:
+                        if isinstance(message, dict):
+                            sanitized_messages.append(
+                                {
+                                    "role": message.get("role"),
+                                    "content": message.get("content"),
+                                }
+                            )
+                        else:
+                            sanitized_messages.append(str(message))
+                    logger.debug(
+                        "Chat completion prompt payload: %s", sanitized_messages
+                    )
+                except Exception as prompt_log_error:  # pragma: no cover - defensive
+                    logger.debug(
+                        "Unable to log chat completion prompt: %s", prompt_log_error
+                    )
+
+                if tools:
+                    tool_names = []
+                    for tool in tools:
+                        function_meta = None
+                        if isinstance(tool, dict):
+                            function_meta = tool.get("function")
+
+                        if isinstance(function_meta, dict):
+                            tool_names.append(function_meta.get("name", "unknown"))
+                        else:
+                            tool_names.append(str(tool))
+                    logger.debug("Chat completion tools: %s", tool_names)
+
             # Add tools/function calling support
             if tools:
                 api_params["tools"] = tools
@@ -348,6 +382,16 @@ class LLMClient:
 
             # Make the API call
             response = self.client.chat.completions.create(**api_params)
+
+            if logger.isEnabledFor(logging.DEBUG):
+                try:
+                    response_payload = response.model_dump()
+                except AttributeError:
+                    try:  # pragma: no cover - fallback for alternative client versions
+                        response_payload = response.dict()
+                    except AttributeError:
+                        response_payload = str(response)
+                logger.debug("Chat completion raw response payload: %s", response_payload)
 
             # Parse response based on whether tools were used
             if tools:
@@ -373,7 +417,7 @@ class LLMClient:
                 logger.debug(
                     f"Function called: {function_name} with {len(arguments)} parameters"
                 )
-                logger.debug(f"Parsed arguments: {arguments}")
+                logger.debug("LLM function output payload: %s", arguments)
 
                 # Additional debugging for batch translations
                 if "translations" in arguments:

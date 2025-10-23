@@ -1122,10 +1122,12 @@ def _translate_missing_plurals(
                 )
 
                 # Add to results
+                source_values = chunk_dict.get(plural_name, {})
                 results.append(
                     {
                         "plural_name": plural_name,
-                        "translations": res.plurals[plural_name],
+                        "source": dict(source_values) if source_values else {},
+                        "translations": dict(res.plurals[plural_name]),
                     }
                 )
 
@@ -1485,55 +1487,141 @@ def create_translation_report(translation_log):
     """
     Generate a Markdown formatted translation report as a string.
     """
-    report = "# Translation Report\n\n"
+    report_lines: List[str] = ["# Translation Report", ""]
     has_translations = False
 
+    def _format_cell(value: Any) -> str:
+        if value is None:
+            return ""
+        if not isinstance(value, str):
+            value = str(value)
+        return value.replace("\n", " ").replace("|", "\\|").strip()
+
     for module, languages in translation_log.items():
-        module_has_translations = False
-        module_report = f"## Module: {module}\n\n"
-        languages_report = ""
+        module_strings: Dict[str, Dict[str, Any]] = {}
+        module_plurals: Dict[str, Dict[str, Any]] = {}
+        string_languages: Set[str] = set()
+        plural_languages: Set[str] = set()
 
         for lang, details in languages.items():
-            has_string_translations = bool(details.get("strings"))
-            has_plural_translations = bool(details.get("plurals"))
-
-            if not (has_string_translations or has_plural_translations):
+            if not details:
                 continue
 
-            module_has_translations = True
-            has_translations = True
-            # Get the language name from the code (will return lang code if name not found)
-            lang_name = get_language_name(lang)
-            languages_report += f"### Language: {lang_name}\n\n"
+            string_entries = details.get("strings", [])
+            if string_entries:
+                string_languages.add(lang)
+                for entry in string_entries:
+                    key = entry.get("key")
+                    if not key:
+                        continue
+                    bucket = module_strings.setdefault(
+                        key,
+                        {
+                            "source": entry.get("source", ""),
+                            "translations": {},
+                        },
+                    )
+                    if not bucket["source"] and entry.get("source"):
+                        bucket["source"] = entry["source"]
+                    bucket["translations"][lang] = entry.get("translation", "")
 
-            if has_string_translations:
-                languages_report += "| Key | Source Text | Translated Text |\n"
-                languages_report += "| --- | ----------- | --------------- |\n"
-                for entry in details["strings"]:
-                    key = entry["key"]
-                    source = entry["source"].replace("\n", " ")
-                    translation = entry["translation"].replace("\n", " ")
-                    languages_report += f"| {key} | {source} | {translation} |\n"
-                languages_report += "\n"
+            plural_entries = details.get("plurals", [])
+            if plural_entries:
+                plural_languages.add(lang)
+                for entry in plural_entries:
+                    plural_name = entry.get("plural_name")
+                    if not plural_name:
+                        continue
+                    bucket = module_plurals.setdefault(
+                        plural_name,
+                        {"source": {}, "translations": {}},
+                    )
+                    source_map = entry.get("source") or {}
+                    if source_map:
+                        if not bucket["source"]:
+                            bucket["source"] = dict(source_map)
+                        else:
+                            for qty, text in source_map.items():
+                                bucket["source"].setdefault(qty, text)
+                    translations_map = entry.get("translations") or {}
+                    lang_map = bucket["translations"].setdefault(lang, {})
+                    lang_map.update(translations_map)
 
-            if has_plural_translations:
-                languages_report += "#### Plural Resources\n\n"
-                for plural in details["plurals"]:
-                    plural_name = plural["plural_name"]
-                    languages_report += f"**{plural_name}**\n\n"
-                    languages_report += "| Quantity | Translated Text |\n"
-                    languages_report += "| -------- | --------------- |\n"
-                    for qty, text in plural["translations"].items():
-                        languages_report += f"| {qty} | {text} |\n"
-                    languages_report += "\n"
+        if not module_strings and not module_plurals:
+            continue
 
-        if module_has_translations:
-            report += module_report + languages_report
+        has_translations = True
+        report_lines.append(f"## Module: {module}")
+        report_lines.append("")
+
+        if module_strings:
+            report_lines.append("### Strings")
+            report_lines.append("")
+
+            string_lang_list = sorted(
+                string_languages, key=lambda code: get_language_name(code).lower()
+            )
+            headers = ["Key", "Source Text"] + [
+                get_language_name(code) for code in string_lang_list
+            ]
+            separator = ["---"] * len(headers)
+            report_lines.append("| " + " | ".join(headers) + " |")
+            report_lines.append("| " + " | ".join(separator) + " |")
+
+            for key in sorted(module_strings.keys()):
+                entry = module_strings[key]
+                row_cells = [
+                    _format_cell(key),
+                    _format_cell(entry.get("source", "")),
+                ]
+                for lang_code in string_lang_list:
+                    row_cells.append(
+                        _format_cell(entry["translations"].get(lang_code, ""))
+                    )
+                report_lines.append("| " + " | ".join(row_cells) + " |")
+            report_lines.append("")
+
+        if module_plurals:
+            report_lines.append("### Plural Resources")
+            report_lines.append("")
+            plural_lang_list = sorted(
+                plural_languages, key=lambda code: get_language_name(code).lower()
+            )
+            for plural_name in sorted(module_plurals.keys()):
+                entry = module_plurals[plural_name]
+                report_lines.append(f"#### {plural_name}")
+                report_lines.append("")
+                headers = ["Quantity", "Source Text"] + [
+                    get_language_name(code) for code in plural_lang_list
+                ]
+                separator = ["---"] * len(headers)
+                report_lines.append("| " + " | ".join(headers) + " |")
+                report_lines.append("| " + " | ".join(separator) + " |")
+
+                quantities: Set[str] = set(entry.get("source", {}).keys())
+                for lang_code in plural_lang_list:
+                    quantities.update(
+                        entry["translations"].get(lang_code, {}).keys()
+                    )
+
+                for quantity in sorted(quantities):
+                    source_text = entry.get("source", {}).get(quantity, "")
+                    row_cells = [
+                        _format_cell(quantity),
+                        _format_cell(source_text),
+                    ]
+                    for lang_code in plural_lang_list:
+                        lang_text = entry["translations"].get(lang_code, {}).get(
+                            quantity, ""
+                        )
+                        row_cells.append(_format_cell(lang_text))
+                    report_lines.append("| " + " | ".join(row_cells) + " |")
+                report_lines.append("")
 
     if not has_translations:
-        report += "No translations were performed."
+        report_lines.append("No translations were performed.")
 
-    return report
+    return "\n".join(report_lines).rstrip() + "\n"
 
 
 # ------------------------------------------------------------------------------

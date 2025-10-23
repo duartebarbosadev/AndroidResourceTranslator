@@ -160,9 +160,9 @@ After the translation process is executed, the action produces an output called 
 - **Module Information:**  
   Each module found in your Android project is listed along with its language-specific resources.
 - **Strings Translations:**  
-  For each module and language, a table displays every key that was translated, including the original text and the resulting translation.
+  For each module, a single table displays every key that was translated, pairing the original text with side-by-side columns for each language.
 - **Plural Resources Translations:**  
-  If plural resources were translated, the report shows each plural resource name along with a table listing each plural quantity (e.g., `one`, `few`, `many`) and their corresponding translations.
+  If plural resources were translated, the report shows each plural name followed by a table listing every quantity with the source text and a column for each language.
 
 This output is particularly useful for manual review and validation. In the provided advanced workflow, the report is automatically inserted into the body of a pull request, allowing maintainers to inspect the changes before merging.
 

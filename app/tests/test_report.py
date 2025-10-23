@@ -46,11 +46,16 @@ class TestReporting(unittest.TestCase):
                             "source": "Hello World",
                             "translation": "Hola Mundo",
                         },
-                        {"key": "goodbye", "source": "Goodbye", "translation": "Adiós"},
+                        {
+                            "key": "goodbye",
+                            "source": "Goodbye",
+                            "translation": "Adiós",
+                        },
                     ],
                     "plurals": [
                         {
                             "plural_name": "days",
+                            "source": {"one": "%d day", "other": "%d days"},
                             "translations": {"one": "%d día", "other": "%d días"},
                         }
                     ],
@@ -74,18 +79,20 @@ class TestReporting(unittest.TestCase):
         self.assertIn("# Translation Report", report)
         self.assertIn("## Module: test_module", report)
 
-        # Check Spanish section
-        self.assertIn("### Language: Spanish", report)
-        self.assertIn("| Key | Source Text | Translated Text |", report)
-        self.assertIn("| hello | Hello World | Hola Mundo |", report)
-        self.assertIn("| goodbye | Goodbye | Adiós |", report)
-        self.assertIn("**days**", report)
-        self.assertIn("| one | %d día |", report)
-        self.assertIn("| other | %d días |", report)
+        # Check consolidated strings table
+        self.assertIn("### Strings", report)
+        self.assertIn("| Key | Source Text | French | Spanish |", report)
+        self.assertIn("| goodbye | Goodbye |  | Adiós |", report)
+        self.assertIn(
+            "| hello | Hello World | Bonjour le monde | Hola Mundo |", report
+        )
 
-        # Check French section
-        self.assertIn("### Language: French", report)
-        self.assertIn("| hello | Hello World | Bonjour le monde |", report)
+        # Check plural table
+        self.assertIn("### Plural Resources", report)
+        self.assertIn("#### days", report)
+        self.assertIn("| Quantity | Source Text | Spanish |", report)
+        self.assertIn("| one | %d day | %d día |", report)
+        self.assertIn("| other | %d days | %d días |", report)
 
     @patch("AndroidResourceTranslator.AndroidResourceFile.parse_file")
     def test_check_missing_translations_none_missing(self, mock_parse_file):

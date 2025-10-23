@@ -227,7 +227,7 @@ class ReleaseNotesGenerator:
             pr_section = "\n\nRelated Pull Requests:\n" + "\n".join(pr_links)
 
         prompt = f"""
-You are a technical writer creating release notes for a desktop photo management application called PhotoSort.
+You are a technical writer creating release notes for a desktop photo management application called AndroidResourceTranslator.
 
 Based on the following git changes for release {tag_name}, write comprehensive release notes in markdown format.
 

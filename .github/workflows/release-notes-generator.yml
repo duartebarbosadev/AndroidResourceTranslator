@@ -1,0 +1,85 @@
+name: Generate Release Notes
+
+on:
+  release:
+    types: [published, prereleased, created]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-release-notes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PIP_NO_PYTHON_VERSION_WARNING: '1'
+      PIP_PROGRESS_BAR: 'off'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install openai
+
+      - name: Determine tag
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAG_NAME="${{ github.event.release.tag_name }}"
+          else
+            # For manual runs, prefer semver sort
+            TAG_NAME="$(git tag --sort=-version:ref | head -n 1 || true)"
+          fi
+          [[ -n "${TAG_NAME}" ]] || { echo "No tag found/provided"; exit 1; }
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Will generate notes for: ${TAG_NAME}"
+
+      - name: Generate release notes (OpenAI)
+        id: generate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          python .github/scripts/generate_release_notes.py "${{ steps.tag.outputs.tag_name }}" --output /tmp/release_notes.md
+          echo "notes_path=/tmp/release_notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure release exists (optional for workflow_dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag_name }}"
+          if ! gh release view "${TAG}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release create "${TAG}" --repo "${{ github.repository }}" --title "${TAG}" --notes "Drafting notes…"
+          fi
+
+      - name: Update release with generated notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release edit "${{ steps.tag.outputs.tag_name }}" \
+            --repo "${{ github.repository }}" \
+            --notes-file "${{ steps.generate.outputs.notes_path }}"
+
+      - name: Upload release notes as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes-${{ steps.tag.outputs.tag_name }}
+          path: /tmp/release_notes.md
+          retention-days: 30

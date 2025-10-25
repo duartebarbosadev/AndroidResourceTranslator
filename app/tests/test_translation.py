@@ -20,9 +20,7 @@ from AndroidResourceTranslator import (
     auto_translate_resources,
     AndroidModule,
     escape_apostrophes,
-    escape_percent,
     escape_double_quotes,
-    escape_at_symbol,
     escape_special_chars,
 )
 from llm_provider import LLMConfig, LLMProvider
@@ -59,37 +57,6 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
                 result = escape_apostrophes(input_text)
                 self.assertEqual(result, expected)
 
-    def test_escape_percent(self):
-        """Test that percent signs are properly escaped."""
-        test_cases = [
-            # Format: (input, expected output)
-            ("No percent signs here", "No percent signs here"),
-            ("15% discount", "15\\% discount"),
-            ("Multiple % percent % signs", "Multiple \\% percent \\% signs"),
-            (
-                "Already escaped percent \\% is fine",
-                "Already escaped percent \\% is fine",
-            ),
-            ("Mixed escaping: 10% and 20\\%", "Mixed escaping: 10\\% and 20\\%"),
-            ("", ""),  # Empty string
-            (None, None),  # None value
-            # Format specifiers should not be escaped
-            ("String with %s format specifier", "String with %s format specifier"),
-            ("Int with %d format specifier", "Int with %d format specifier"),
-            (
-                "Indexed with %1$s format specifier",
-                "Indexed with %1$s format specifier",
-            ),
-            # Mix of format specifiers and regular percent signs
-            ("Mix of %s and % signs", "Mix of %s and \\% signs"),
-            ("Pattern 100% %d complete", "Pattern 100\\% %d complete"),
-        ]
-
-        for input_text, expected in test_cases:
-            with self.subTest(input_text=input_text):
-                result = escape_percent(input_text)
-                self.assertEqual(result, expected)
-
     def test_escape_double_quotes(self):
         """Test that double quotes are properly escaped."""
         test_cases = [
@@ -114,27 +81,6 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
                 result = escape_double_quotes(input_text)
                 self.assertEqual(result, expected)
 
-    def test_escape_at_symbol(self):
-        """Test that at symbols are properly escaped."""
-        test_cases = [
-            # Format: (input, expected output)
-            ("No at symbols here", "No at symbols here"),
-            ("Email: user@example.com", "Email: user\\@example.com"),
-            ("Multiple @ symbols @ here", "Multiple \\@ symbols \\@ here"),
-            ("Already escaped \\@symbol is fine", "Already escaped \\@symbol is fine"),
-            (
-                "Mixed escaping: @symbol and \\@symbol",
-                "Mixed escaping: \\@symbol and \\@symbol",
-            ),
-            ("", ""),  # Empty string
-            (None, None),  # None value
-        ]
-
-        for input_text, expected in test_cases:
-            with self.subTest(input_text=input_text):
-                result = escape_at_symbol(input_text)
-                self.assertEqual(result, expected)
-
     def test_escape_special_chars(self):
         """Test that all special characters are properly escaped in a single pass."""
         test_cases = [
@@ -142,23 +88,9 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
             ("Normal text", "Normal text"),
             # Test with individual special characters
             ("Text with apostrophe's", "Text with apostrophe\\'s"),
-            ("Text with percent 50%", "Text with percent 50\\%"),
             ('Text with "quotes"', 'Text with \\"quotes\\"'),
-            ("Text with @symbol", "Text with \\@symbol"),
-            # Test with multiple different special characters
-            (
-                'Mixed "quote", apostrophe\'s, 25% and user@example.com',
-                'Mixed \\"quote\\", apostrophe\\\'s, 25\\% and user\\@example.com',
-            ),
-            # Test that format specifiers are preserved
-            ("Format %s and %d with %1$s escape", "Format %s and %d with %1$s escape"),
-            # Test with already escaped characters
-            ("Pre-escaped \\'s and \\% and \\@", "Pre-escaped \\'s and \\% and \\@"),
-            # Test with complex mix of escaped and unescaped
-            (
-                "Mixed: \"quote\" and \\\"quote\\\", 'single' and \\'single\\', 10% and \\%",
-                "Mixed: \\\"quote\\\" and \\\"quote\\\", \\'single\\' and \\'single\\', 10\\% and \\%",
-            ),
+            ("Line with newline\nbreak", "Line with newline\\nbreak"),
+            ("Already escaped \\n stays literal", "Already escaped \\n stays literal"),
             ("", ""),  # Empty string
             (None, None),  # None value
         ]
@@ -168,6 +100,23 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
                 result = escape_special_chars(input_text)
                 self.assertEqual(result, expected)
 
+    def test_escape_special_chars_aligns_backslashes_with_reference(self):
+        """Ensure escaped sequences match the reference string."""
+        source = "Progress: %d%% complete\\nKeep going!"
+        translated = "Progreso: %d%% completo\\\\n¡Sigue!"
+        expected = "Progreso: %d%% completo\\n¡Sigue!"
+        self.assertEqual(
+            escape_special_chars(translated, reference_text=source), expected
+        )
+
+        source_regex = "Regex guide:\\nUse \\\\d for digits\\nUse \\\\n for new line"
+        translated_regex = "Guía regex:\\\\nUsa \\\\\\\\d para dígitos\\\\nUsa \\\\\\\\n para nueva línea"
+        expected_regex = "Guía regex:\\nUsa \\\\d para dígitos\\nUsa \\\\n para nueva línea"
+        self.assertEqual(
+            escape_special_chars(translated_regex, reference_text=source_regex),
+            expected_regex,
+        )
+
     def test_escape_special_chars_preserves_html_markup(self):
         """Ensure escaping preserves inline HTML markup and attributes."""
         simple_html = 'Visit our <a href="https://test.com">website</a> for more info'
@@ -175,7 +124,7 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
 
         complex_html = "Don't miss our <a href='https://test.com'>sale</a> at 50% off"
         expected_complex = (
-            'Don\\\'t miss our <a href="https://test.com">sale</a> at 50\\% off'
+            'Don\\\'t miss our <a href="https://test.com">sale</a> at 50% off'
         )
         self.assertEqual(escape_special_chars(complex_html), expected_complex)
 

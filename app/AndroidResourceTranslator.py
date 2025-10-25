@@ -12,7 +12,7 @@ import re
 import os
 from pathlib import Path
 from collections import defaultdict
-from typing import Any, Dict, Set, List, Tuple
+from typing import Any, Dict, Set, List, Tuple, Optional
 from lxml import etree
 from language_utils import get_language_name
 
@@ -678,30 +678,6 @@ def escape_apostrophes(text: str) -> str:
     return re.sub(r"(?<!\\)'", r"\'", text)
 
 
-def escape_percent(text: str) -> str:
-    """
-    Ensure percent signs in the text are properly escaped for Android resource files.
-
-    This function checks if percent signs are already properly escaped with a backslash (\\%)
-    and adds the escape character if needed. This is important for Android resource files
-    as unescaped percent signs can be mistaken for format specifiers.
-
-    Args:
-        text: The text to process
-
-    Returns:
-        The text with properly escaped percent signs
-    """
-    # Skip processing if the text is empty or None
-    if not text:
-        return text
-
-    # Replace any standalone percent signs (not already escaped) with escaped versions
-    # This regex looks for percent signs that aren't already preceded by a backslash
-    # and aren't part of a format specifier like %s, %d, %1$s, etc.
-    return re.sub(r"(?<!\\)%(?![0-9]?[$]?[sd])", r"\\%", text)
-
-
 def escape_double_quotes(text: str) -> str:
     """
     Ensure double quotes in the text are properly escaped for Android resource files.
@@ -725,53 +701,116 @@ def escape_double_quotes(text: str) -> str:
     return re.sub(r'(?<!\\)"', r'\\"', text)
 
 
-def escape_at_symbol(text: str) -> str:
-    """
-    Ensure at symbols in the text are properly escaped for Android resource files.
+def _normalize_newlines(text: str) -> str:
+    """Convert actual newline characters to their escaped form for XML resources."""
+    if not text:
+        return text
 
-    This function checks if at symbols are already properly escaped with a backslash (\\@)
-    and adds the escape character if needed. This is important for Android resource files
-    as unescaped at symbols can be interpreted as references to resources.
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # Replace literal newline characters with escaped sequences
+    return normalized.replace("\n", "\\n")
+
+
+def _extract_backslash_sequences(text: str) -> List[Tuple[str, int]]:
+    """Return a list of (following_char, backslash_run_length) found in the text."""
+    sequences: List[Tuple[str, int]] = []
+    if not text or "\\" not in text:
+        return sequences
+
+    i = 0
+    length = len(text)
+
+    while i < length:
+        if text[i] != "\\":
+            i += 1
+            continue
+
+        start = i
+        while i < length and text[i] == "\\":
+            i += 1
+
+        run_length = i - start
+        next_char = text[i] if i < length else ""
+        sequences.append((next_char, run_length))
+
+    return sequences
+
+
+def _align_backslash_sequences(reference: str, text: str) -> str:
+    """
+    Align escaped sequences in translated text with those from the reference string.
+
+    This keeps the exact count of backslashes for tokens like \n, \\n, \d, etc.,
+    preventing accidental double-escaping or loss of escapes introduced by the LLM.
+    """
+    if not reference or "\\" not in reference or "\\" not in text:
+        return text
+
+    reference_sequences = _extract_backslash_sequences(reference)
+    if not reference_sequences:
+        return text
+
+    seq_index = 0
+    result: List[str] = []
+    i = 0
+    length = len(text)
+
+    while i < length:
+        char = text[i]
+
+        if char != "\\":
+            result.append(char)
+            i += 1
+            continue
+
+        run_start = i
+        while i < length and text[i] == "\\":
+            i += 1
+
+        run_length = i - run_start
+        next_char = text[i] if i < length else ""
+
+        if (
+            seq_index < len(reference_sequences)
+            and reference_sequences[seq_index][0] == next_char
+        ):
+            _, ref_length = reference_sequences[seq_index]
+            run_length = ref_length
+            seq_index += 1
+
+        result.append("\\" * run_length)
+
+    return "".join(result)
+
+
+def escape_special_chars(text: str, reference_text: Optional[str] = None) -> str:
+    """
+    Normalize translated text to keep Android escape sequences intact.
+
+    The function aligns backslash runs with the reference string, converts literal
+    newline characters to escaped ``\\n`` sequences, and ensures apostrophes and
+    double quotes stay properly escaped when needed.
 
     Args:
         text: The text to process
+        reference_text: Optional source string used to mirror escape counts
 
     Returns:
-        The text with properly escaped at symbols
+        The normalized text safe for Android XML resources
     """
     # Skip processing if the text is empty or None
     if not text:
         return text
 
-    # Replace any standalone at symbols (not already escaped) with escaped versions
-    # This regex looks for at symbols that aren't already preceded by a backslash
-    return re.sub(r"(?<!\\)@", r"\\@", text)
-
-
-def escape_special_chars(text: str) -> str:
-    """
-    Ensure all special characters in the text are properly escaped for Android resource files.
-
-    This function applies all individual escape functions to handle apostrophes, percent signs,
-    double quotes, and at symbols in a single pass.
-
-    Args:
-        text: The text to process
-
-    Returns:
-        The text with all special characters properly escaped
-    """
-    # Skip processing if the text is empty or None
-    if not text:
-        return text
+    text = _normalize_newlines(text)
+    text = _align_backslash_sequences(reference_text or "", text)
 
     def _escape_plain(chunk: str) -> str:
         if not chunk:
             return chunk
         chunk = escape_apostrophes(chunk)
-        chunk = escape_percent(chunk)
         chunk = escape_double_quotes(chunk)
-        chunk = escape_at_symbol(chunk)
         return chunk
 
     def _escape_fragment(node) -> None:
@@ -993,7 +1032,9 @@ def _translate_missing_strings(
                 source_text = chunk_dict[key]
 
                 # Ensure special characters are escaped
-                translated = escape_special_chars(translated)
+                translated = escape_special_chars(
+                    translated, reference_text=source_text
+                )
 
                 logger.info(
                     f"Translated string '{key}' to {lang}: '{source_text}' -> '{translated}'"
@@ -1106,10 +1147,13 @@ def _translate_missing_plurals(
             # Process results
             for plural_name, generated_plural in translations.items():
                 current_map = res.plurals.get(plural_name, {})
+                reference_map = module_default_plurals.get(plural_name, {})
 
                 # Ensure special characters are escaped
                 for quantity, text in generated_plural.items():
-                    generated_plural[quantity] = escape_special_chars(text)
+                    generated_plural[quantity] = escape_special_chars(
+                        text, reference_text=reference_map.get(quantity, "")
+                    )
 
                 # Merge with existing translations
                 merged = generated_plural.copy()

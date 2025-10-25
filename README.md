@@ -69,10 +69,9 @@ jobs:
       - name: Translate strings.xml to supported languages
         id: translate
         uses: duartebarbosadev/AndroidResourceTranslator@v1
-        with:
-          llm_provider: openrouter
-          model: google/gemini-2.5-flash-preview-09-2025
-          # (Optional inputs)
+        #with: # (Optional inputs - see readme for default values)
+          #llm_provider: openrouter
+          #model: google/gemini-2.5-flash-preview-09-2025
           #resources_paths: "./app/src/main/res"  # default with no value will search entire project automatically
           #log_trace: "true" #default is false
           #ignore_folders: "build" # Default will follow .gitignore

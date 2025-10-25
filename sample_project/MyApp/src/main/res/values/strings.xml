@@ -85,4 +85,7 @@
     <!-- Long text example -->
     <string name="privacy_policy">Your privacy is important to us. We collect only necessary information to provide you with the best shopping experience. Your data is encrypted and never shared with third parties without your consent.</string>
     <string name="tips_message">Shopping Tips:\n\n• Plan ahead to save 15-20%\n• Compare prices before buying\n• Use coupons for up to 50% savings\n• Shop during sales (save 30%+)\n\nHappy shopping!</string>
+    
+    <!-- Edge case: Mix of actual newlines (\n) and regex pattern examples (\\d, \\s) -->
+    <string name="regex_pattern">Regex guide:\nUse \\d for digits\nUse \\s for whitespace\nUse \\n for new line</string>
 </resources>

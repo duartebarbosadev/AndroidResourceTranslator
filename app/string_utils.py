@@ -168,7 +168,7 @@ def _normalize_html_tag_attributes(segment: str) -> str:
     if not segment or not segment.startswith("<"):
         return segment
     return _HTML_SINGLE_QUOTE_ATTR_PATTERN.sub(
-        lambda match: f"{match.group(1)}=\"{match.group(2)}\"", segment
+        lambda match: f'{match.group(1)}="{match.group(2)}"', segment
     )
 
 

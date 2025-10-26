@@ -113,7 +113,9 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
 
         source_regex = "Regex guide:\\nUse \\\\d for digits\\nUse \\\\n for new line"
         translated_regex = "Guía regex:\\\\nUsa \\\\\\\\d para dígitos\\\\nUsa \\\\\\\\n para nueva línea"
-        expected_regex = "Guía regex:\\nUsa \\\\d para dígitos\\nUsa \\\\n para nueva línea"
+        expected_regex = (
+            "Guía regex:\\nUsa \\\\d para dígitos\\nUsa \\\\n para nueva línea"
+        )
         self.assertEqual(
             escape_special_chars(translated_regex, reference_text=source_regex),
             expected_regex,

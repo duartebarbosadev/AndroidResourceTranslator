@@ -12,7 +12,7 @@ import re
 import os
 from pathlib import Path
 from collections import defaultdict
-from typing import Any, Dict, Set, List, Tuple, Optional
+from typing import Any, Dict, Set, List, Tuple
 from lxml import etree
 from language_utils import get_language_name
 from string_utils import escape_special_chars
@@ -205,7 +205,6 @@ def _set_element_inner_xml(element, content: str) -> None:
 
     for child in wrapper:
         element.append(child)
-
 
 
 def configure_logging(trace: bool) -> None:

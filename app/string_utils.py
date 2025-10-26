@@ -10,6 +10,18 @@ __all__ = [
     "escape_special_chars",
 ]
 
+# Characters that can follow a backslash to form escape sequences:
+#   n: newline (\n)
+#   r: carriage return (\r)
+#   t: tab (\t)
+#   b: backspace (\b)
+#   f: form feed (\f)
+#   \": double quote (\")
+#   ': single quote (\')
+#   d: regex digit class (\d)
+#   s: regex whitespace class (\s)
+#   D: regex non-digit class (\D)
+#   S: regex non-whitespace class (\S)
 _BACKSLASH_SEQUENCE_TARGETS = set("nrtbf\"'dsDS")
 _HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 _HTML_SINGLE_QUOTE_ATTR_PATTERN = re.compile(r"(\s+[\w:-]+)=\'([^\']*)\'")

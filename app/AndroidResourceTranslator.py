@@ -15,6 +15,7 @@ from collections import defaultdict
 from typing import Any, Dict, Set, List, Tuple, Optional
 from lxml import etree
 from language_utils import get_language_name
+from string_utils import escape_special_chars
 
 # Import git utilities from separate module
 from git_utils import (
@@ -50,7 +51,7 @@ This translation is for an Android application's UI. Use concise, clear language
 - Keep all placeholders (e.g., %d, %s, %1$s, %1$d) exactly as in the source. If the target language requires reordering, ensure that the same placeholders appear and are correctly positioned according to the language's syntax.
 - Maintain the integrity of HTML, CDATA, or XML structures; translate only the textual content.  
 - Preserve all whitespace, line breaks, and XML formatting exactly as in the source.  
-- Escape apostrophes with a SINGLE backslash (\') as required by Android.
+- Escape apostrophes with a backslash (\') as required by Android.
 
 **Handling Line Breaks:**
 When translating phrases with line breaks (e.g., "Temporary\nUnblock"):
@@ -86,7 +87,8 @@ Terms like 'accessibility service' and app-specific features should be translate
 - "Message Sent" → ✅ "Mensagem enviada" (❌ "Mensagem foi enviada")  
 - "Upload Speed" → ✅ "Velocidade de upload" (❌ "Velocidade de envio")
 - "Endless scrolling" → ✅ "Scroll sem fim" (❌ "Deslocamento infinito")
-- "Temporary\nUnblock" → ✅ "Desbloquear\nTemporariamente" (❌ "Temporário\nDesbloquear") (Note that in Portuguese the word order is reversed as per grammar rules)
+- "Temporary\nUnblock" → ✅ "Desbloquear\nTemporariamente" (❌ "Temporário
+Desbloquear") (Note that in Portuguese the word order is reversed as per grammar rules)
 
 Learn from the examples above and apply the same principles to other translations.
 
@@ -203,6 +205,7 @@ def _set_element_inner_xml(element, content: str) -> None:
 
     for child in wrapper:
         element.append(child)
+
 
 
 def configure_logging(trace: bool) -> None:
@@ -841,14 +844,16 @@ def _translate_missing_strings(
             # Process results
             for key, translated in translations.items():
                 source_text = chunk_dict[key]
+                normalized = escape_special_chars(
+                    translated, reference_text=source_text
+                )
 
-                # Ensure special characters are escaped
                 logger.info(
-                    f"Translated string '{key}' to {lang}: '{source_text}' -> '{translated}'"
+                    f"Translated string '{key}' to {lang}: '{source_text}' -> '{normalized}'"
                 )
 
                 # Update the resource
-                res.strings[key] = translated
+                res.strings[key] = normalized
                 res.modified = True
 
                 # Add to results
@@ -856,7 +861,7 @@ def _translate_missing_strings(
                     {
                         "key": key,
                         "source": source_text,
-                        "translation": translated,
+                        "translation": normalized,
                     }
                 )
 
@@ -955,10 +960,17 @@ def _translate_missing_plurals(
             for plural_name, generated_plural in translations.items():
                 current_map = res.plurals.get(plural_name, {})
                 reference_map = module_default_plurals.get(plural_name, {})
-                
-                # Merge with existing translations
-                merged = generated_plural.copy()
-                merged.update(current_map)
+
+                sanitized_plural: Dict[str, str] = {}
+                for quantity, translated_text in generated_plural.items():
+                    reference_text = reference_map.get(quantity)
+                    sanitized_plural[quantity] = escape_special_chars(
+                        translated_text, reference_text=reference_text
+                    )
+
+                # Merge with existing translations, preserving already translated values
+                merged = current_map.copy()
+                merged.update(sanitized_plural)
                 res.plurals[plural_name] = merged
                 res.modified = True
 

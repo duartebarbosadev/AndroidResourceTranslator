@@ -152,6 +152,11 @@ def _align_backslash_sequences_with_reference(
 
 
 def _collapse_redundant_quote_backslashes(text: str) -> str:
+    """
+    Collapses two or more consecutive backslashes that appear immediately before a quote character
+    (either single or double quote) into exactly one backslash plus the quote character.
+    This ensures that redundant escaping is removed, e.g., \\\\\" becomes \\".
+    """
     if not text:
         return text
     return re.sub(r"\\{2,}([\"'])", r"\\\1", text)

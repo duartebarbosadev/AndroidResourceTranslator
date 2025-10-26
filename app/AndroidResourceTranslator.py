@@ -12,9 +12,10 @@ import re
 import os
 from pathlib import Path
 from collections import defaultdict
-from typing import Any, Dict, Set, List, Tuple, Optional
+from typing import Any, Dict, Set, List, Tuple
 from lxml import etree
 from language_utils import get_language_name
+from string_utils import escape_special_chars
 
 # Import git utilities from separate module
 from git_utils import (
@@ -50,10 +51,10 @@ This translation is for an Android application's UI. Use concise, clear language
 - Keep all placeholders (e.g., %d, %s, %1$s, %1$d) exactly as in the source. If the target language requires reordering, ensure that the same placeholders appear and are correctly positioned according to the language's syntax.
 - Maintain the integrity of HTML, CDATA, or XML structures; translate only the textual content.  
 - Preserve all whitespace, line breaks, and XML formatting exactly as in the source.  
-- Escape apostrophes with a backslash (\\') as required by Android.
+- Escape apostrophes with a backslash (\') as required by Android.
 
 **Handling Line Breaks:**
-When translating phrases with line breaks (e.g., "Temporary\\nUnblock"):
+When translating phrases with line breaks (e.g., "Temporary\nUnblock"):
 1. Read the entire phrase to understand its complete meaning
 2. Translate the complete phrase into the target language
 3. Apply the line break in the translation if it maintains similar meaning
@@ -86,7 +87,8 @@ Terms like 'accessibility service' and app-specific features should be translate
 - "Message Sent" → ✅ "Mensagem enviada" (❌ "Mensagem foi enviada")  
 - "Upload Speed" → ✅ "Velocidade de upload" (❌ "Velocidade de envio")
 - "Endless scrolling" → ✅ "Scroll sem fim" (❌ "Deslocamento infinito")
-- "Temporary\\nUnblock" → ✅ "Desbloquear\\nTemporariamente" (❌ "Temporário\nDesbloquear") (Note that in Portuguese the word order is reversed as per grammar rules)
+- "Temporary\nUnblock" → ✅ "Desbloquear\nTemporariamente" (❌ "Temporário
+Desbloquear") (Note that in Portuguese the word order is reversed as per grammar rules)
 
 Learn from the examples above and apply the same principles to other translations.
 
@@ -651,195 +653,6 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
 
 
 # ------------------------------------------------------------------------------
-# Translation & OpenAI API Integration
-# ------------------------------------------------------------------------------
-
-
-def escape_apostrophes(text: str) -> str:
-    """
-    Ensure apostrophes in the text are properly escaped for Android resource files.
-
-    This function checks if apostrophes are already properly escaped with a backslash (\')
-    and adds the escape character if needed. This is critical for Android resource files
-    as unescaped apostrophes will cause XML parsing errors.
-
-    Args:
-        text: The text to process
-
-    Returns:
-        The text with properly escaped apostrophes
-    """
-    # Skip processing if the text is empty or None
-    if not text:
-        return text
-
-    # Replace any standalone apostrophes (not already escaped) with escaped versions
-    # This regex looks for apostrophes that aren't already preceded by a backslash
-    return re.sub(r"(?<!\\)'", r"\'", text)
-
-
-def escape_double_quotes(text: str) -> str:
-    """
-    Ensure double quotes in the text are properly escaped for Android resource files.
-
-    This function checks if double quotes are already properly escaped with a backslash (\")
-    and adds the escape character if needed. This is essential for Android resource files
-    as unescaped double quotes can cause XML parsing errors.
-
-    Args:
-        text: The text to process
-
-    Returns:
-        The text with properly escaped double quotes
-    """
-    # Skip processing if the text is empty or None
-    if not text:
-        return text
-
-    # Replace any standalone double quotes (not already escaped) with escaped versions
-    # This regex looks for double quotes that aren't already preceded by a backslash
-    return re.sub(r'(?<!\\)"', r'\\"', text)
-
-
-def _normalize_newlines(text: str) -> str:
-    """Convert actual newline characters to their escaped form for XML resources."""
-    if not text:
-        return text
-
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-
-    # Replace literal newline characters with escaped sequences
-    return normalized.replace("\n", "\\n")
-
-
-def _extract_backslash_sequences(text: str) -> List[Tuple[str, int]]:
-    """Return a list of (following_char, backslash_run_length) found in the text."""
-    sequences: List[Tuple[str, int]] = []
-    if not text or "\\" not in text:
-        return sequences
-
-    i = 0
-    length = len(text)
-
-    while i < length:
-        if text[i] != "\\":
-            i += 1
-            continue
-
-        start = i
-        while i < length and text[i] == "\\":
-            i += 1
-
-        run_length = i - start
-        next_char = text[i] if i < length else ""
-        sequences.append((next_char, run_length))
-
-    return sequences
-
-
-def _align_backslash_sequences(reference: str, text: str) -> str:
-    """
-    Align escaped sequences in translated text with those from the reference string.
-
-    This keeps the exact count of backslashes for tokens like \n, \\n, \d, etc.,
-    preventing accidental double-escaping or loss of escapes introduced by the LLM.
-    """
-    if not reference or "\\" not in reference or "\\" not in text:
-        return text
-
-    reference_sequences = _extract_backslash_sequences(reference)
-    if not reference_sequences:
-        return text
-
-    seq_index = 0
-    result: List[str] = []
-    i = 0
-    length = len(text)
-
-    while i < length:
-        char = text[i]
-
-        if char != "\\":
-            result.append(char)
-            i += 1
-            continue
-
-        run_start = i
-        while i < length and text[i] == "\\":
-            i += 1
-
-        run_length = i - run_start
-        next_char = text[i] if i < length else ""
-
-        if (
-            seq_index < len(reference_sequences)
-            and reference_sequences[seq_index][0] == next_char
-        ):
-            _, ref_length = reference_sequences[seq_index]
-            run_length = ref_length
-            seq_index += 1
-
-        result.append("\\" * run_length)
-
-    return "".join(result)
-
-
-def escape_special_chars(text: str, reference_text: Optional[str] = None) -> str:
-    """
-    Normalize translated text to keep Android escape sequences intact.
-
-    The function aligns backslash runs with the reference string, converts literal
-    newline characters to escaped ``\\n`` sequences, and ensures apostrophes and
-    double quotes stay properly escaped when needed.
-
-    Args:
-        text: The text to process
-        reference_text: Optional source string used to mirror escape counts
-
-    Returns:
-        The normalized text safe for Android XML resources
-    """
-    # Skip processing if the text is empty or None
-    if not text:
-        return text
-
-    text = _normalize_newlines(text)
-    text = _align_backslash_sequences(reference_text or "", text)
-
-    def _escape_plain(chunk: str) -> str:
-        if not chunk:
-            return chunk
-        chunk = escape_apostrophes(chunk)
-        chunk = escape_double_quotes(chunk)
-        return chunk
-
-    def _escape_fragment(node) -> None:
-        if node.text:
-            node.text = _escape_plain(node.text)
-        for child in node:
-            _escape_fragment(child)
-            if child.tail:
-                child.tail = _escape_plain(child.tail)
-
-    # Detect potential markup to avoid corrupting attributes
-    contains_markup = "<" in text and ">" in text
-
-    if contains_markup:
-        try:
-            parser = _create_secure_fragment_parser()
-            wrapper = etree.fromstring(
-                f"<__wrapper__>{text}</__wrapper__>", parser=parser
-            )
-            _escape_fragment(wrapper)
-            return _serialize_inner_xml(wrapper)
-        except etree.XMLSyntaxError:
-            # Fall back to plain escaping if content isn't valid XML
-            pass
-
-    return _escape_plain(text)
-
-
-# ------------------------------------------------------------------------------
 # Auto-Translation Process
 # ------------------------------------------------------------------------------
 
@@ -1030,18 +843,16 @@ def _translate_missing_strings(
             # Process results
             for key, translated in translations.items():
                 source_text = chunk_dict[key]
-
-                # Ensure special characters are escaped
-                translated = escape_special_chars(
+                normalized = escape_special_chars(
                     translated, reference_text=source_text
                 )
 
                 logger.info(
-                    f"Translated string '{key}' to {lang}: '{source_text}' -> '{translated}'"
+                    f"Translated string '{key}' to {lang}: '{source_text}' -> '{normalized}'"
                 )
 
                 # Update the resource
-                res.strings[key] = translated
+                res.strings[key] = normalized
                 res.modified = True
 
                 # Add to results
@@ -1049,7 +860,7 @@ def _translate_missing_strings(
                     {
                         "key": key,
                         "source": source_text,
-                        "translation": translated,
+                        "translation": normalized,
                     }
                 )
 
@@ -1149,15 +960,16 @@ def _translate_missing_plurals(
                 current_map = res.plurals.get(plural_name, {})
                 reference_map = module_default_plurals.get(plural_name, {})
 
-                # Ensure special characters are escaped
-                for quantity, text in generated_plural.items():
-                    generated_plural[quantity] = escape_special_chars(
-                        text, reference_text=reference_map.get(quantity, "")
+                sanitized_plural: Dict[str, str] = {}
+                for quantity, translated_text in generated_plural.items():
+                    reference_text = reference_map.get(quantity)
+                    sanitized_plural[quantity] = escape_special_chars(
+                        translated_text, reference_text=reference_text
                     )
 
-                # Merge with existing translations
-                merged = generated_plural.copy()
-                merged.update(current_map)
+                # Merge with existing translations, preserving already translated values
+                merged = current_map.copy()
+                merged.update(sanitized_plural)
                 res.plurals[plural_name] = merged
                 res.modified = True
 

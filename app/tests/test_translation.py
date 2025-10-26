@@ -19,6 +19,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from AndroidResourceTranslator import (
     auto_translate_resources,
     AndroidModule,
+)
+from string_utils import (
     escape_apostrophes,
     escape_double_quotes,
     escape_special_chars,
@@ -111,10 +113,30 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
 
         source_regex = "Regex guide:\\nUse \\\\d for digits\\nUse \\\\n for new line"
         translated_regex = "Guía regex:\\\\nUsa \\\\\\\\d para dígitos\\\\nUsa \\\\\\\\n para nueva línea"
-        expected_regex = "Guía regex:\\nUsa \\\\d para dígitos\\nUsa \\\\n para nueva línea"
+        expected_regex = (
+            "Guía regex:\\nUsa \\\\d para dígitos\\nUsa \\\\n para nueva línea"
+        )
         self.assertEqual(
             escape_special_chars(translated_regex, reference_text=source_regex),
             expected_regex,
+        )
+
+    def test_escape_special_chars_collapses_duplicate_backslashes_before_quotes(self):
+        """Ensure redundant escaping before quotes is reduced to a single backslash."""
+        source = "Select one option"
+        translated = "Sélectionnez l\\\\'une"
+        expected = "Sélectionnez l\\'une"
+        self.assertEqual(
+            escape_special_chars(translated, reference_text=source), expected
+        )
+
+    def test_escape_special_chars_handles_extended_backslash_runs(self):
+        """Triple backslashes before quotes collapse to match the reference."""
+        source = "Select one option"
+        translated = "Sélectionnez l\\\\\\'une"
+        expected = "Sélectionnez l\\'une"
+        self.assertEqual(
+            escape_special_chars(translated, reference_text=source), expected
         )
 
     def test_escape_special_chars_preserves_html_markup(self):

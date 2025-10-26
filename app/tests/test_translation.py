@@ -130,6 +130,11 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
             escape_special_chars(translated, reference_text=source), expected
         )
 
+    def test_escape_special_chars_unescapes_percent_sign(self):
+        """Percent signs are never kept with a preceding backslash."""
+        text = "Poupe \\% extra hoje"
+        self.assertEqual(escape_special_chars(text), "Poupe % extra hoje")
+
     def test_escape_special_chars_handles_extended_backslash_runs(self):
         """Triple backslashes before quotes collapse to match the reference."""
         source = "Select one option"

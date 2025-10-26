@@ -222,4 +222,5 @@ def escape_special_chars(
 
     value = _align_backslash_sequences_with_reference(value, reference_text)
     value = _collapse_redundant_quote_backslashes(value)
+    value = value.replace("\\%", "%")
     return value

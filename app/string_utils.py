@@ -25,6 +25,9 @@ __all__ = [
 _BACKSLASH_SEQUENCE_TARGETS = set("nrtbf\"'dsDS")
 _HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 _HTML_SINGLE_QUOTE_ATTR_PATTERN = re.compile(r"(\s+[\w:-]+)=\'([^\']*)\'")
+_PERCENT_PLACEHOLDER_PATTERN = re.compile(
+    r"%(?:(\d+)\$)?[#0\-+',<]*(?:\d+)?(?:\.\d+)?[bBhHsScCdoxXeEfgGaAtTn%]"
+)
 
 
 def _escape_character(text: str, target: str) -> str:
@@ -181,12 +184,64 @@ def _normalize_line_breaks(text: str) -> str:
     return normalized.replace("\n", "\\n")
 
 
+def _normalize_tabs(text: str) -> str:
+    if not text:
+        return text
+    return text.replace("\t", "\\t")
+
+
 def _normalize_html_tag_attributes(segment: str) -> str:
     if not segment or not segment.startswith("<"):
         return segment
     return _HTML_SINGLE_QUOTE_ATTR_PATTERN.sub(
         lambda match: f'{match.group(1)}="{match.group(2)}"', segment
     )
+
+
+def _escape_android_text_segment(segment: str) -> str:
+    """Escape characters that Android expects to be escaped inside text nodes."""
+    if not segment:
+        return segment
+
+    segment = escape_apostrophes(segment)
+    segment = escape_double_quotes(segment)
+    segment = _escape_character(segment, "@")
+    segment = _escape_character(segment, "?")
+    return segment
+
+
+def _escape_percent_literals(text: str) -> str:
+    """Ensure literal percent signs are doubled while keeping format placeholders."""
+    if not text:
+        return text
+
+    result: List[str] = []
+    length = len(text)
+    i = 0
+
+    while i < length:
+        char = text[i]
+        if char != "%":
+            result.append(char)
+            i += 1
+            continue
+
+        if i + 1 < length and text[i + 1] == "%":
+            result.append("%%")
+            i += 2
+            continue
+
+        placeholder_match = _PERCENT_PLACEHOLDER_PATTERN.match(text, i)
+        if placeholder_match:
+            placeholder = placeholder_match.group(0)
+            result.append(placeholder)
+            i += len(placeholder)
+            continue
+
+        result.append("%%")
+        i += 1
+
+    return "".join(result)
 
 
 def escape_special_chars(
@@ -200,6 +255,7 @@ def escape_special_chars(
 
     contains_html = bool(_HTML_TAG_PATTERN.search(text))
     value = _normalize_line_breaks(text)
+    value = _normalize_tabs(value)
 
     if contains_html:
         segments = re.split(r"(<[^>]+>)", value)
@@ -211,16 +267,14 @@ def escape_special_chars(
                 processed_segments.append(_normalize_html_tag_attributes(segment))
                 continue
 
-            escaped_segment = escape_apostrophes(segment)
-            escaped_segment = escape_double_quotes(escaped_segment)
-            processed_segments.append(escaped_segment)
+            processed_segments.append(_escape_android_text_segment(segment))
 
         value = "".join(processed_segments)
     else:
-        value = escape_apostrophes(value)
-        value = escape_double_quotes(value)
+        value = _escape_android_text_segment(value)
 
     value = _align_backslash_sequences_with_reference(value, reference_text)
     value = _collapse_redundant_quote_backslashes(value)
     value = value.replace("\\%", "%")
+    value = _escape_percent_literals(value)
     return value

@@ -92,6 +92,7 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
             ("@reference style", "\\@reference style"),
             ("Question? Maybe", "Question\\? Maybe"),
             ("?Leading question mark", "\\?Leading question mark"),
+            ("Sale at 50% off", "Sale at 50\\% off"),
             # Test with individual special characters
             ("Text with apostrophe's", "Text with apostrophe\\'s"),
             ('Text with "quotes"', 'Text with \\"quotes\\"'),
@@ -111,7 +112,7 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
         """Ensure escaped sequences match the reference string."""
         source = "Progress: %d%% complete\\nKeep going!"
         translated = "Progreso: %d%% completo\\\\n¡Sigue!"
-        expected = "Progreso: %d%% completo\\n¡Sigue!"
+        expected = "Progreso: %d\\% completo\\n¡Sigue!"
         self.assertEqual(
             escape_special_chars(translated, reference_text=source), expected
         )
@@ -135,15 +136,15 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
             escape_special_chars(translated, reference_text=source), expected
         )
 
-    def test_escape_special_chars_doubles_literal_percent(self):
-        """Percent signs should be doubled unless part of a placeholder."""
+    def test_escape_special_chars_escapes_literal_percent(self):
+        """Percent signs should gain a backslash unless part of a placeholder."""
         text = "Poupe \\% extra hoje"
-        self.assertEqual(escape_special_chars(text), "Poupe %% extra hoje")
+        self.assertEqual(escape_special_chars(text), "Poupe \\% extra hoje")
 
     def test_escape_special_chars_preserves_placeholders(self):
         """Ensure format placeholders keep a single percent sign."""
         text = "Olá %1$s, tens %d mensagens e 20% de bateria"
-        expected = "Olá %1$s, tens %d mensagens e 20%% de bateria"
+        expected = "Olá %1$s, tens %d mensagens e 20\\% de bateria"
         self.assertEqual(escape_special_chars(text), expected)
 
     def test_escape_special_chars_handles_extended_backslash_runs(self):
@@ -162,7 +163,7 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
 
         complex_html = "Don't miss our <a href='https://test.com'>sale</a> at 50% off"
         expected_complex = (
-            'Don\\\'t miss our <a href="https://test.com">sale</a> at 50%% off'
+            'Don\\\'t miss our <a href="https://test.com">sale</a> at 50\\% off'
         )
         self.assertEqual(escape_special_chars(complex_html), expected_complex)
 

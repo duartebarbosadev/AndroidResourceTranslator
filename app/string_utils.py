@@ -211,7 +211,7 @@ def _escape_android_text_segment(segment: str) -> str:
 
 
 def _escape_percent_literals(text: str) -> str:
-    """Ensure literal percent signs are doubled while keeping format placeholders."""
+    """Ensure literal percent signs include a backslash while preserving placeholders."""
     if not text:
         return text
 
@@ -227,7 +227,7 @@ def _escape_percent_literals(text: str) -> str:
             continue
 
         if i + 1 < length and text[i + 1] == "%":
-            result.append("%%")
+            result.append("\\%")
             i += 2
             continue
 
@@ -238,7 +238,7 @@ def _escape_percent_literals(text: str) -> str:
             i += len(placeholder)
             continue
 
-        result.append("%%")
+        result.append("\\%")
         i += 1
 
     return "".join(result)

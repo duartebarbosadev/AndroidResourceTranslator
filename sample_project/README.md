@@ -13,6 +13,8 @@ sample_project/
         ├── values-es/strings.xml       (Spanish - ~60% complete)
         ├── values-pt-rPT/strings.xml   (Portuguese - ~40% complete)
         └── values-zh-rCN/strings.xml   (Chinese - ~15% complete)
+└── ScrollessCrashRepro/ (Crash reproduction fixture)
+    └── mobile/src/main/res/           (Scrolless accessibility strings)
 ```
 
 ### Translation States
@@ -20,6 +22,7 @@ sample_project/
 - **Spanish (`es`)**: ~60% complete - several strings and one plural missing
 - **Portuguese (`pt-rPT`)**: ~40% complete - many strings and both plurals missing
 - **Chinese (`zh-rCN`)**: ~15% complete - most strings and all plurals missing
+- **ScrollessCrashRepro**: mirrors the Scrolless accessibility copy that triggered the `help_step3_description:` KeyError. Non-default locales intentionally contain only `app_name`, forcing the translator to request the full batch of 41 keys.
 
 ## Quick Start
 
@@ -95,6 +98,17 @@ Enable verbose output for debugging:
 ```bash
 python app/AndroidResourceTranslator.py sample_project/ --log-trace
 ```
+
+### Crash Reproduction Fixture
+
+To reproduce the `help_step3_description:` KeyError without relying on the real Scrolless repository, point the translator to the dedicated fixture:
+
+```bash
+python app/AndroidResourceTranslator.py sample_project/ScrollessCrashRepro/ \
+  --project-context "Scrolless is an Android app designed to help users reduce time spent on social media and avoid brainrot by limiting endless scrolling of Reels, Shorts, and TikToks."
+```
+
+This uses the same 41 English strings involved in the production failure and five locale directories (`de`, `hu`, `ja`, `nb-rNO`, `ta-rIN`) that deliberately lack translations so the translator attempts a full batch and exposes the bug.
 
 ## Command Reference
 

@@ -48,7 +48,7 @@ on:
     paths:
       - '**/values/strings.xml' # Call only when strings.xml is updated
   workflow_dispatch:
-
+    
 permissions:
   contents: write
   pull-requests: write
@@ -72,8 +72,8 @@ jobs:
         #with: # (Optional inputs - see readme for default values)
           #llm_provider: openrouter
           #model: google/gemini-2.5-flash-preview-09-2025
-          #resources_paths: "./app/src/main/res"  # default with no value will search entire project automatically
-          #log_trace: "true" #default is false
+          #resources_paths: "./app/src/main/res"  # default with no value will search throughout the project automatically
+          #log_trace: "true" # default is false
           #ignore_folders: "build" # Default will follow .gitignore
           #project_context: "Your project context here" # (Default is no context)
           #openrouter_send_site_info: "false" # Set to false to disable sending site info to OpenRouter
@@ -84,7 +84,7 @@ jobs:
 
       - name: Save translation report for PR body
         run: |
-          cat <<'EOF' > "$RUNNER_TEMP/translation_report.md"
+          cat <<'EOF' > "${{ runner.temp }}/translation_report.md"
           ${{ steps.translate.outputs.translation_report }}
           EOF
 
@@ -97,10 +97,10 @@ jobs:
           author: "${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>"
           signoff: "false"
           title: "[Translate Bot] Auto-generated translations for non-English languages"
+          body-path: ${{ runner.temp }}/translation_report.md
           labels: "translation, automated pr"
           assignees: "[yourname]"
           reviewers: "[yourname]"
-          body-path: ${{ env.RUNNER_TEMP }}/translation_report.md
 ```
 
 ### ⚠️ API Usage and Pricing Considerations

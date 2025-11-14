@@ -211,7 +211,7 @@ def _escape_android_text_segment(segment: str) -> str:
 
 
 def _escape_percent_literals(text: str) -> str:
-    """Ensure literal percent signs include a backslash while preserving placeholders."""
+    """Ensure literal percent signs include a single backslash while preserving placeholders."""
     if not text:
         return text
 
@@ -238,7 +238,18 @@ def _escape_percent_literals(text: str) -> str:
             i += len(placeholder)
             continue
 
-        result.append("\\%")
+        backslash_count = 0
+        j = i - 1
+        while j >= 0 and text[j] == "\\":
+            backslash_count += 1
+            j -= 1
+
+        if backslash_count % 2 == 1:
+            # Already escaped (odd number of preceding backslashes), keep it literal.
+            result.append("%")
+        else:
+            result.append("\\%")
+
         i += 1
 
     return "".join(result)

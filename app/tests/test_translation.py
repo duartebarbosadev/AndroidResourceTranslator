@@ -147,6 +147,11 @@ class TestSpecialCharacterEscaping(unittest.TestCase):
         expected = "Olá %1$s, tens %d mensagens e 20\\% de bateria"
         self.assertEqual(escape_special_chars(text), expected)
 
+    def test_escape_special_chars_does_not_double_escape_existing_percent(self):
+        """Literal percents that are already escaped should remain single-escaped."""
+        text = "Oferta especial: 50\\% de desconto!"
+        self.assertEqual(escape_special_chars(text), text)
+
     def test_escape_special_chars_handles_extended_backslash_runs(self):
         """Triple backslashes before quotes collapse to match the reference."""
         source = "Select one option"

@@ -17,7 +17,7 @@ If you want to quickly try out the action with minimal configuration, add this s
 
 ```yaml
 - name: Run Android Resource Translator
-  uses: duartebarbosadev/AndroidResourceTranslator@v1
+  uses: duartebarbosadev/AndroidResourceTranslator@v2
   env:
     OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 ```
@@ -26,7 +26,7 @@ If you want to quickly try out the action with minimal configuration, add this s
 
 ```yaml
 - name: Run Android Resource Translator
-  uses: duartebarbosadev/AndroidResourceTranslator@v1
+  uses: duartebarbosadev/AndroidResourceTranslator@v2
   with:
     llm_provider: openai
     model: gpt-4o-mini
@@ -68,7 +68,7 @@ jobs:
 
       - name: Translate strings.xml to supported languages
         id: translate
-        uses: duartebarbosadev/AndroidResourceTranslator@v1
+        uses: duartebarbosadev/AndroidResourceTranslator@v2
         #with: # (Optional inputs - see readme for default values)
           #llm_provider: openrouter
           #model: google/gemini-2.5-flash-preview-09-2025

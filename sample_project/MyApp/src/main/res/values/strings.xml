@@ -5,8 +5,9 @@
 
     <!-- Welcome Screen -->
     <string name="welcome_title">Welcome to Shopping List</string>
-    <string name="welcome_message">Your smart shopping companion</string>
+    <string name="welcome_message">Your smart shopping companion\nSave time and money!</string>
     <string name="get_started">Get Started</string>
+    <string name="welcome_description">Track your shopping with ease\nGet personalized recommendations\nSave up to 30\% on groceries</string>
 
     <!-- Main Screen -->
     <string name="add_item">Add Item</string>
@@ -25,6 +26,8 @@
     <string name="hello_user">Hello, %s!</string>
     <string name="total_price">Total: $%.2f</string>
     <string name="discount_message">Save %d%% on your purchase!</string>
+    <string name="savings_summary">You saved %d%% this month\nTotal savings: $%.2f</string>
+    <string name="completion_rate">Progress: %d%% complete\nKeep going!</string>
 
     <!-- Plural Resources -->
     <plurals name="items_remaining">
@@ -39,11 +42,13 @@
     </plurals>
 
     <!-- Special Characters -->
-    <string name="discount_rate">Special offer: 50% off!</string>
+    <string name="discount_rate">Special offer: 50\% off!</string>
     <string name="terms_message">By continuing, you agree to our Terms &amp; Conditions</string>
     <string name="email_format">Email: user@example.com</string>
     <string name="quote_example">He said, \"This is great!\"</string>
     <string name="apostrophe_example">Don\'t forget to check the price</string>
+    <string name="multi_line_terms">Terms of Service:\n1. Save up to 70\% on select items\n2. Prices subject to change\n3. Discounts apply automatically</string>
+    <string name="battery_warning">Battery level: %d%%\nPlease charge your device</string>
 
     <!-- HTML and CDATA -->
     <string name="formatted_message"><![CDATA[<b>Bold text</b> and <i>italic text</i>]]></string>
@@ -60,10 +65,12 @@
     <string name="error_empty_name">Please enter a name</string>
     <string name="error_network">Network error. Please try again.</string>
     <string name="error_invalid_quantity">Quantity must be greater than 0</string>
+    <string name="storage_warning">Storage: %d%% full\nPlease free up space\nto continue</string>
 
     <!-- Confirmation Messages -->
     <string name="confirm_delete">Are you sure you want to delete this item?</string>
     <string name="confirm_clear_list">This will remove all items from the list. Continue?</string>
+    <string name="promotional_message">Limited Time Offer!\n\nGet 25\% off your next purchase\nValid for the next 48 hours\n\nUse code: SAVE25</string>
 
     <!-- Settings -->
     <string name="settings">Settings</string>
@@ -77,4 +84,8 @@
 
     <!-- Long text example -->
     <string name="privacy_policy">Your privacy is important to us. We collect only necessary information to provide you with the best shopping experience. Your data is encrypted and never shared with third parties without your consent.</string>
+    <string name="tips_message">Shopping Tips:\n\n• Plan ahead to save 15-20\%\n• Compare prices before buying\n• Use coupons for up to 50\% savings\n• Shop during sales (save 30\%+)\n\nHappy shopping!</string>
+    
+    <!-- Edge case: Mix of actual newlines (\n) and regex pattern examples (\\d, \\s) -->
+    <string name="regex_pattern">Regex guide:\nUse \\d for digits\nUse \\s for whitespace\nUse \\n for new line</string>
 </resources>

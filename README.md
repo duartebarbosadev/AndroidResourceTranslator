@@ -48,7 +48,7 @@ on:
     paths:
       - '**/values/strings.xml' # Call only when strings.xml is updated
   workflow_dispatch:
-
+    
 permissions:
   contents: write
   pull-requests: write
@@ -69,12 +69,11 @@ jobs:
       - name: Translate strings.xml to supported languages
         id: translate
         uses: duartebarbosadev/AndroidResourceTranslator@v1
-        with:
-          llm_provider: openrouter
-          model: google/gemini-2.5-flash-preview-09-2025
-          # (Optional inputs)
-          #resources_paths: "./app/src/main/res"  # default with no value will search entire project automatically
-          #log_trace: "true" #default is false
+        #with: # (Optional inputs - see readme for default values)
+          #llm_provider: openrouter
+          #model: google/gemini-2.5-flash-preview-09-2025
+          #resources_paths: "./app/src/main/res"  # default with no value will search throughout the project automatically
+          #log_trace: "true" # default is false
           #ignore_folders: "build" # Default will follow .gitignore
           #project_context: "Your project context here" # (Default is no context)
           #openrouter_send_site_info: "false" # Set to false to disable sending site info to OpenRouter
@@ -83,13 +82,10 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
-      - name: Persist translation report
+      - name: Save translation report for PR body
         run: |
-          cat <<'EOF' > translation-report.md
+          cat <<'EOF' > "${{ runner.temp }}/translation_report.md"
           ${{ steps.translate.outputs.translation_report }}
-
-          ---
-          This pull request was automatically generated.
           EOF
 
       - name: Create Pull Request
@@ -101,13 +97,10 @@ jobs:
           author: "${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>"
           signoff: "false"
           title: "[Translate Bot] Auto-generated translations for non-English languages"
-          body-path: translation-report.md
+          body-path: ${{ runner.temp }}/translation_report.md
           labels: "translation, automated pr"
           assignees: "[yourname]"
           reviewers: "[yourname]"
-
-      - name: Cleanup temporary files
-        run: rm -f translation-report.md
 ```
 
 ### ⚠️ API Usage and Pricing Considerations

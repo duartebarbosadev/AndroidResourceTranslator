@@ -15,6 +15,7 @@ from collections import defaultdict
 from typing import Any, Dict, Set, List, Tuple
 from lxml import etree
 from language_utils import get_language_name
+from string_utils import escape_special_chars
 
 # Import git utilities from separate module
 from git_utils import (
@@ -50,10 +51,10 @@ This translation is for an Android application's UI. Use concise, clear language
 - Keep all placeholders (e.g., %d, %s, %1$s, %1$d) exactly as in the source. If the target language requires reordering, ensure that the same placeholders appear and are correctly positioned according to the language's syntax.
 - Maintain the integrity of HTML, CDATA, or XML structures; translate only the textual content.  
 - Preserve all whitespace, line breaks, and XML formatting exactly as in the source.  
-- Escape apostrophes with a backslash (\\') as required by Android.
+- Escape apostrophes with a backslash (\') as required by Android.
 
 **Handling Line Breaks:**
-When translating phrases with line breaks (e.g., "Temporary\\nUnblock"):
+When translating phrases with line breaks (e.g., "Temporary\nUnblock"):
 1. Read the entire phrase to understand its complete meaning
 2. Translate the complete phrase into the target language
 3. Apply the line break in the translation if it maintains similar meaning
@@ -79,6 +80,11 @@ Make sure to keep the translation within a reasonable size, not exceeding 20% of
 - Match the formality level commonly used in popular, well-localized android apps in the target language
 - Use direct address forms (equivalent to "you" in English) that feel natural in the target language
 
+**Key Handling & Completeness:**
+- Return each JSON key exactly as it appears in the input. Do not add, remove, or modify characters (including punctuation, colons, or whitespace) in the key names.
+- Translate the full source string without omitting or shortening any part of the message. Even brief status notes or explanations must remain complete; do not summarize or drop phrases to make the text shorter.
+- Preserve every sentence, clause, and nuance from the source. The translation should be as long as necessary to cover the entire source meaning (it is acceptable if it exceeds the original length when required by the target language).
+
 **Technical Terms:**
 Terms like 'accessibility service' and app-specific features should be translated using standard UI terminology in the target language.
 
@@ -86,7 +92,8 @@ Terms like 'accessibility service' and app-specific features should be translate
 - "Message Sent" → ✅ "Mensagem enviada" (❌ "Mensagem foi enviada")  
 - "Upload Speed" → ✅ "Velocidade de upload" (❌ "Velocidade de envio")
 - "Endless scrolling" → ✅ "Scroll sem fim" (❌ "Deslocamento infinito")
-- "Temporary\\nUnblock" → ✅ "Desbloquear\\nTemporariamente" (❌ "Temporário\nDesbloquear") (Note that in Portuguese the word order is reversed as per grammar rules)
+- "Temporary\nUnblock" → ✅ "Desbloquear\nTemporariamente" (❌ "Temporário
+Desbloquear") (Note that in Portuguese the word order is reversed as per grammar rules)
 
 Learn from the examples above and apply the same principles to other translations.
 
@@ -651,156 +658,6 @@ def update_xml_file(resource: AndroidResourceFile) -> None:
 
 
 # ------------------------------------------------------------------------------
-# Translation & OpenAI API Integration
-# ------------------------------------------------------------------------------
-
-
-def escape_apostrophes(text: str) -> str:
-    """
-    Ensure apostrophes in the text are properly escaped for Android resource files.
-
-    This function checks if apostrophes are already properly escaped with a backslash (\')
-    and adds the escape character if needed. This is critical for Android resource files
-    as unescaped apostrophes will cause XML parsing errors.
-
-    Args:
-        text: The text to process
-
-    Returns:
-        The text with properly escaped apostrophes
-    """
-    # Skip processing if the text is empty or None
-    if not text:
-        return text
-
-    # Replace any standalone apostrophes (not already escaped) with escaped versions
-    # This regex looks for apostrophes that aren't already preceded by a backslash
-    return re.sub(r"(?<!\\)'", r"\'", text)
-
-
-def escape_percent(text: str) -> str:
-    """
-    Ensure percent signs in the text are properly escaped for Android resource files.
-
-    This function checks if percent signs are already properly escaped with a backslash (\\%)
-    and adds the escape character if needed. This is important for Android resource files
-    as unescaped percent signs can be mistaken for format specifiers.
-
-    Args:
-        text: The text to process
-
-    Returns:
-        The text with properly escaped percent signs
-    """
-    # Skip processing if the text is empty or None
-    if not text:
-        return text
-
-    # Replace any standalone percent signs (not already escaped) with escaped versions
-    # This regex looks for percent signs that aren't already preceded by a backslash
-    # and aren't part of a format specifier like %s, %d, %1$s, etc.
-    return re.sub(r"(?<!\\)%(?![0-9]?[$]?[sd])", r"\\%", text)
-
-
-def escape_double_quotes(text: str) -> str:
-    """
-    Ensure double quotes in the text are properly escaped for Android resource files.
-
-    This function checks if double quotes are already properly escaped with a backslash (\")
-    and adds the escape character if needed. This is essential for Android resource files
-    as unescaped double quotes can cause XML parsing errors.
-
-    Args:
-        text: The text to process
-
-    Returns:
-        The text with properly escaped double quotes
-    """
-    # Skip processing if the text is empty or None
-    if not text:
-        return text
-
-    # Replace any standalone double quotes (not already escaped) with escaped versions
-    # This regex looks for double quotes that aren't already preceded by a backslash
-    return re.sub(r'(?<!\\)"', r'\\"', text)
-
-
-def escape_at_symbol(text: str) -> str:
-    """
-    Ensure at symbols in the text are properly escaped for Android resource files.
-
-    This function checks if at symbols are already properly escaped with a backslash (\\@)
-    and adds the escape character if needed. This is important for Android resource files
-    as unescaped at symbols can be interpreted as references to resources.
-
-    Args:
-        text: The text to process
-
-    Returns:
-        The text with properly escaped at symbols
-    """
-    # Skip processing if the text is empty or None
-    if not text:
-        return text
-
-    # Replace any standalone at symbols (not already escaped) with escaped versions
-    # This regex looks for at symbols that aren't already preceded by a backslash
-    return re.sub(r"(?<!\\)@", r"\\@", text)
-
-
-def escape_special_chars(text: str) -> str:
-    """
-    Ensure all special characters in the text are properly escaped for Android resource files.
-
-    This function applies all individual escape functions to handle apostrophes, percent signs,
-    double quotes, and at symbols in a single pass.
-
-    Args:
-        text: The text to process
-
-    Returns:
-        The text with all special characters properly escaped
-    """
-    # Skip processing if the text is empty or None
-    if not text:
-        return text
-
-    def _escape_plain(chunk: str) -> str:
-        if not chunk:
-            return chunk
-        chunk = escape_apostrophes(chunk)
-        chunk = escape_percent(chunk)
-        chunk = escape_double_quotes(chunk)
-        chunk = escape_at_symbol(chunk)
-        return chunk
-
-    def _escape_fragment(node) -> None:
-        if node.text:
-            node.text = _escape_plain(node.text)
-        for child in node:
-            _escape_fragment(child)
-            if child.tail:
-                child.tail = _escape_plain(child.tail)
-
-    # Detect potential markup to avoid corrupting attributes
-    contains_markup = "<" in text and ">" in text
-
-    if contains_markup:
-        try:
-            parser = _create_secure_fragment_parser()
-            wrapper = etree.fromstring(
-                f"<__wrapper__>{text}</__wrapper__>", parser=parser
-            )
-            _escape_fragment(wrapper)
-            return _serialize_inner_xml(wrapper)
-        except etree.XMLSyntaxError:
-            # Fall back to plain escaping if content isn't valid XML
-            pass
-
-    return _escape_plain(text)
-
-
-# ------------------------------------------------------------------------------
 # Auto-Translation Process
 # ------------------------------------------------------------------------------
 
@@ -991,16 +848,16 @@ def _translate_missing_strings(
             # Process results
             for key, translated in translations.items():
                 source_text = chunk_dict[key]
-
-                # Ensure special characters are escaped
-                translated = escape_special_chars(translated)
+                normalized = escape_special_chars(
+                    translated, reference_text=source_text
+                )
 
                 logger.info(
-                    f"Translated string '{key}' to {lang}: '{source_text}' -> '{translated}'"
+                    f"Translated string '{key}' to {lang}: '{source_text}' -> '{normalized}'"
                 )
 
                 # Update the resource
-                res.strings[key] = translated
+                res.strings[key] = normalized
                 res.modified = True
 
                 # Add to results
@@ -1008,7 +865,7 @@ def _translate_missing_strings(
                     {
                         "key": key,
                         "source": source_text,
-                        "translation": translated,
+                        "translation": normalized,
                     }
                 )
 
@@ -1106,14 +963,18 @@ def _translate_missing_plurals(
             # Process results
             for plural_name, generated_plural in translations.items():
                 current_map = res.plurals.get(plural_name, {})
+                reference_map = module_default_plurals.get(plural_name, {})
 
-                # Ensure special characters are escaped
-                for quantity, text in generated_plural.items():
-                    generated_plural[quantity] = escape_special_chars(text)
+                sanitized_plural: Dict[str, str] = {}
+                for quantity, translated_text in generated_plural.items():
+                    reference_text = reference_map.get(quantity)
+                    sanitized_plural[quantity] = escape_special_chars(
+                        translated_text, reference_text=reference_text
+                    )
 
-                # Merge with existing translations
-                merged = generated_plural.copy()
-                merged.update(current_map)
+                # Merge with existing translations, preserving already translated values
+                merged = current_map.copy()
+                merged.update(sanitized_plural)
                 res.plurals[plural_name] = merged
                 res.modified = True
 

@@ -80,6 +80,11 @@ Make sure to keep the translation within a reasonable size, not exceeding 20% of
 - Match the formality level commonly used in popular, well-localized android apps in the target language
 - Use direct address forms (equivalent to "you" in English) that feel natural in the target language
 
+**Key Handling & Completeness:**
+- Return each JSON key exactly as it appears in the input. Do not add, remove, or modify characters (including punctuation, colons, or whitespace) in the key names.
+- Translate the full source string without omitting or shortening any part of the message. Even brief status notes or explanations must remain complete; do not summarize or drop phrases to make the text shorter.
+- Preserve every sentence, clause, and nuance from the source. The translation should be as long as necessary to cover the entire source meaning (it is acceptable if it exceeds the original length when required by the target language).
+
 **Technical Terms:**
 Terms like 'accessibility service' and app-specific features should be translated using standard UI terminology in the target language.
 

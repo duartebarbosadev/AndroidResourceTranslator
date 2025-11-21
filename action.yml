@@ -30,9 +30,9 @@ inputs:
     required: false
     default: "openrouter"
   model:
-    description: "Model to use for translation (e.g., 'google/gemini-2.5-flash-preview-09-2025' for OpenRouter, 'gpt-4o-mini' for OpenAI)"
+    description: "Model to use for translation (e.g., 'google/gemini-2.5-flash' for OpenRouter, 'gpt-4o-mini' for OpenAI)"
     required: false
-    default: "google/gemini-2.5-flash-preview-09-2025"
+    default: "google/gemini-2.5-flash"
   openrouter_site_url:
     description: "Your site URL for OpenRouter rankings (This Github action is set by default - optional, only used with OpenRouter)"
     required: false

@@ -1422,7 +1422,7 @@ def main() -> None:
         # LLM Provider configuration
         llm_provider = os.environ.get("INPUT_LLM_PROVIDER", "openrouter").lower()
         model = os.environ.get("INPUT_MODEL") or os.environ.get(
-            "INPUT_OPENAI_MODEL", "google/gemini-2.5-flash-preview-09-2025"
+            "INPUT_OPENAI_MODEL", "google/gemini-2.5-flash"
         )  # Support legacy param
 
         # API Keys - check provider-specific key first, then fall back to OpenAI key for compatibility
@@ -1507,8 +1507,8 @@ def main() -> None:
         )
         parser.add_argument(
             "--model",
-            default="google/gemini-2.5-flash-preview-09-2025",
-            help="Model to use for translation (default: google/gemini-2.5-flash-preview-09-2025)",
+            default="google/gemini-2.5-flash",
+            help="Model to use for translation (default: google/gemini-2.5-flash)",
         )
         parser.add_argument(
             "--openai-model",

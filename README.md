@@ -1,10 +1,8 @@
 # Android Resource Translator
 
-*WIP*
+**Android Resource Translator** scans `strings.xml` files for missing translations and automatically translates them using AI language models (OpenAI or OpenRouter).
 
-**Android Resource Translator** scans your `strings.xml` files for missing translations and automatically translates them using AI language models (OpenAI or OpenRouter).
-
-<!--[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-enabled-brightgreen)](https://github.com/)-->
+[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-enabled-brightgreen)](https://github.com/marketplace/actions/android-resource-translator)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/Python-3.x-blue.svg)](https://www.python.org/)
@@ -13,7 +11,7 @@
 
 ### Simple Example (Using OpenRouter with Gemini - Default)
 
-If you want to quickly try out the action with minimal configuration, add this step to your workflow. This uses the default provider (OpenRouter) and model (Gemini google/gemini-2.5-flash-preview-09-2025):
+If you want to quickly try out the action with minimal configuration, add this step to your workflow. This uses the default provider (OpenRouter) and model (Gemini google/gemini-2.5-flash):
 
 ```yaml
 - name: Run Android Resource Translator
@@ -64,14 +62,14 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Translate strings.xml to supported languages
         id: translate
         uses: duartebarbosadev/AndroidResourceTranslator@v2
         #with: # (Optional inputs - see readme for default values)
           #llm_provider: openrouter
-          #model: google/gemini-2.5-flash-preview-09-2025
+          #model: google/gemini-2.5-flash
           #resources_paths: "./app/src/main/res"  # default with no value will search throughout the project automatically
           #log_trace: "true" # default is false
           #ignore_folders: "build" # Default will follow .gitignore
@@ -103,11 +101,14 @@ jobs:
           reviewers: "[yourname]"
 ```
 
+⚠️ Warning ⚠️ If you don’t specify a model, the action will use this project’s default model, which may change in future releases to improve translation quality but cost might change.
+
 ### ⚠️ API Usage and Pricing Considerations
 
 Please note that each time the action runs, it will process **all** missing translations. This can impact your API usage and associated costs, especially for large projects with many strings or frequent commits. Meaning that you should accept this action PR's as soon as possible to avoid repeating runs.
 
-We recommend the model google/gemini-2.5-flash-preview-09-2025 as it got the best results in our testing and is not as expensive as the bigger models.
+We recommend the model google/gemini-2.5-flash as it got the best results in our testing and is not as expensive as other models.
+
 ## Local Execution
 
 To run the translator on your local machine, execute:
@@ -128,7 +129,7 @@ The action supports the following inputs:
 | **dry_run**                  | Run in dry-run mode (only report missing translations without translating). Set to `"true"` to enable dry-run mode.                                                                                                                           | `"false"`                                                              | Yes      | `"true"` or `"false"`                                                  |
 | **log_trace**                | Enable detailed logging. Use `"true"` for verbose output.                                                                                                                                                                                     | `"false"`                                                              | Yes      | `"true"`                                                               |
 | **llm_provider**             | LLM provider to use for translation. Options are `"openai"` or `"openrouter"`.                                                                                                                                                                 | `"openrouter"`                                                             | Yes      | `"openai"`, `"openrouter"`                                              |
-| **model**                    | Model to use for translation. For OpenAI: `gpt-4o-mini`, `gpt-4o`, etc. For OpenRouter: `google/gemini-2.5-flash-preview-09-2025` (recommended), `anthropic/claude-3.5-sonnet`, etc.                                                                                     | `"google/gemini-2.5-flash-preview-09-2025"`                                                        | Yes      | `"google/gemini-2.5-flash-preview-09-2025"`, `"anthropic/claude-3.5-sonnet"`         |
+| **model**                    | Model to use for translation. For OpenAI: `gpt-4o-mini`, `gpt-4o`, etc. For OpenRouter: `google/gemini-2.5-flash` (recommended), `anthropic/claude-4.5-sonnet`, etc.                                                                                     | `"google/gemini-2.5-flash"`                                                        | Yes      | `"google/gemini-2.5-flash"`, `"anthropic/claude-3.5-sonnet"`         |
 | **openrouter_site_url**      | Your site URL for OpenRouter rankings. Used to identify your application in OpenRouter analytics.                                                                                                                                             | `"https://github.com/duartebarbosadev/AndroidResourceTranslator"`     | Yes      | ``                         |
 | **openrouter_site_name**     | Your site name for OpenRouter rankings. Used to identify your application in OpenRouter analytics.                                                                                                                                            | `"AndroidResourceTranslatorAction"`                                    | Yes      | `""`                                                        |
 | **openrouter_send_site_info** | Send site URL and name to OpenRouter for rankings. Set to `"false"` to disable.                                                                                                                                                               | `"true"`                                                               | Yes      | `"true"` or `"false"`                                                  |

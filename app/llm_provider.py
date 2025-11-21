@@ -182,7 +182,7 @@ class LLMConfig:
     Attributes:
         provider: The LLM provider to use (OpenAI or OpenRouter)
         api_key: API key for authentication
-        model: Model identifier (e.g., "gpt-4o-mini" or "google/gemini-2.5-flash-preview-09-2025")
+        model: Model identifier (e.g., "gpt-4o-mini" or "google/gemini-2.5-flash")
         site_url: Optional site URL for OpenRouter rankings
         site_name: Optional site name for OpenRouter rankings
         send_site_info: Whether to send site URL/name to OpenRouter (default: True)

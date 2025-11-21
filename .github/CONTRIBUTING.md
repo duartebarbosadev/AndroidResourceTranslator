@@ -113,7 +113,7 @@ python app/AndroidResourceTranslator.py sample_project/
 
 **Test with OpenRouter (Gemini):**
 ```bash
-python app/AndroidResourceTranslator.py sample_project/ --llm-provider openrouter --model google/gemini-2.5-flash-preview-09-2025
+python app/AndroidResourceTranslator.py sample_project/ --llm-provider openrouter --model google/gemini-2.5-flash
 ```
 
 **Test with Project Context:**

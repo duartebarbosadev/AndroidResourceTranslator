@@ -111,7 +111,7 @@ python app/AndroidResourceTranslator.py <path> [options]
 | `--dry-run`, `-d`               | Only report missing translations (don't translate) | `False`                              |
 | `--log-trace`, `-l`             | Enable detailed logging                   | `False`                                   |
 | `--llm-provider`                  | LLM provider:`openai` or `openrouter` | `openrouter`                              |
-| `--model`                         | Model to use                              | `google/gemini-2.5-flash-preview-09-2025` |
+| `--model`                         | Model to use                              | `google/gemini-2.5-flash` |
 | `--openrouter-site-url`           | Site URL for OpenRouter rankings          | (AndroidResourceTranslator GitHub)          |
 | `--openrouter-site-name`          | Site name for OpenRouter rankings         | `AndroidResourceTranslatorAction`         |
 | `--openrouter-send-site-info`     | Send site info to OpenRouter              | `True`                                    |
@@ -124,10 +124,8 @@ python app/AndroidResourceTranslator.py <path> [options]
 
 **OpenRouter (Default):**
 
-- `google/gemini-2.5-flash-preview-09-2025` - Google Gemini 2.5 Flash (default, cost-effective)
-- `google/gemini-2.5-flash` - Google Gemini 2.0 Flash
+- `google/gemini-2.5-flash` - Google Gemini 2.5 Flash
 - `anthropic/claude-3.5-sonnet` - Anthropic Claude 3.5 Sonnet
-- `meta-llama/llama-3.1-405b-instruct` - Meta Llama 3.1 405B
 - `openai/gpt-4o` - OpenAI GPT-4o (via OpenRouter)
 
 **OpenAI:**

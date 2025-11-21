@@ -95,47 +95,6 @@ Enable verbose output for debugging:
 ```bash
 python app/AndroidResourceTranslator.py sample_project/ --log-trace
 ```
-
-## Command Reference
-
-### Basic Usage
-
-```bash
-python app/AndroidResourceTranslator.py <path> [options]
-```
-
-### Available Options
-
-| Option                              | Description                               | Default                                     |
-| ----------------------------------- | ----------------------------------------- | ------------------------------------------- |
-| `--dry-run`, `-d`               | Only report missing translations (don't translate) | `False`                              |
-| `--log-trace`, `-l`             | Enable detailed logging                   | `False`                                   |
-| `--llm-provider`                  | LLM provider:`openai` or `openrouter` | `openrouter`                              |
-| `--model`                         | Model to use                              | `google/gemini-2.5-flash` |
-| `--openrouter-site-url`           | Site URL for OpenRouter rankings          | (AndroidResourceTranslator GitHub)          |
-| `--openrouter-site-name`          | Site name for OpenRouter rankings         | `AndroidResourceTranslatorAction`         |
-| `--openrouter-send-site-info`     | Send site info to OpenRouter              | `True`                                    |
-| `--project-context`               | Additional context for translations       | (none)                                      |
-| `--ignore-folders`                | Comma-separated folders to ignore         | (follows .gitignore)                        |
-| `--openai-api-key`                | API key (or use env var)                  | `$OPENAI_API_KEY`                         |
-| `--openrouter-api-key`            | OpenRouter API key                        | `$OPENROUTER_API_KEY`                     |
-
-### Supported Models
-
-**OpenRouter (Default):**
-
-- `google/gemini-2.5-flash` - Google Gemini 2.5 Flash
-- `anthropic/claude-3.5-sonnet` - Anthropic Claude 3.5 Sonnet
-- `openai/gpt-4o` - OpenAI GPT-4o (via OpenRouter)
-
-**OpenAI:**
-
-- `gpt-4o-mini` (cost-effective)
-- `gpt-4o` (more powerful)
-- `gpt-4-turbo`
-
-See [OpenRouter Models](https://openrouter.ai/docs/models) for the complete list.
-
 ## Expected Results
 
 ### Dry Run Output

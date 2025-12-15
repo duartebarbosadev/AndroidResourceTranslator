@@ -78,7 +78,7 @@ jobs:
             --notes-file "${{ steps.generate.outputs.notes_path }}"
 
       - name: Upload release notes as artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: release-notes-${{ steps.tag.outputs.tag_name }}
           path: /tmp/release_notes.md

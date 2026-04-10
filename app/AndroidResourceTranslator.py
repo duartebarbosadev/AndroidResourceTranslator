@@ -147,6 +147,13 @@ Translate the following string provided after the dashed line to language: {targ
 
 logger = logging.getLogger(__name__)
 
+_STANDARD_LOCALE_QUALIFIER_PATTERN = re.compile(
+    r"^[a-z]{2,3}(?:-r(?:[A-Z]{2}|\d{3}))?$"
+)
+_BCP47_LOCALE_QUALIFIER_PATTERN = re.compile(
+    r"^b\+[A-Za-z]{2,3}(?:\+[A-Za-z]{4})?(?:\+(?:[A-Z]{2}|\d{3}))?$"
+)
+
 
 def _create_secure_fragment_parser() -> etree.XMLParser:
     """Return an XML parser configured to avoid external entity resolution."""
@@ -371,6 +378,16 @@ def detect_language_from_path(file_path: Path) -> str:
         )
 
     language = match.group(1)
+    if not (
+        _STANDARD_LOCALE_QUALIFIER_PATTERN.fullmatch(language)
+        or _BCP47_LOCALE_QUALIFIER_PATTERN.fullmatch(language)
+    ):
+        raise ValueError(
+            f"Invalid Android locale qualifier: '{values_dir}'. "
+            "Expected a locale folder such as 'values-es', 'values-pt-rPT', "
+            "or 'values-b+sr+Latn'."
+        )
+
     logger.debug(f"Detected language '{language}' from {values_dir}")
     return language
 
@@ -460,7 +477,15 @@ def find_resource_files(
             continue
 
         # Detect which language this resource file is for
-        language = detect_language_from_path(xml_file_path)
+        try:
+            language = detect_language_from_path(xml_file_path)
+        except ValueError:
+            logger.debug(
+                "Skipping %s because '%s' is not a locale resource directory",
+                xml_file_path,
+                xml_file_path.parent.name,
+            )
+            continue
 
         try:
             # Identify the module based on the project structure

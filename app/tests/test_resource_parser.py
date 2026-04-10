@@ -233,6 +233,25 @@ class TestFindResourceFiles(TestResourceParser):
             "Should only find resources in values directory",
         )
 
+    def test_non_locale_values_qualifiers_are_ignored(self):
+        """Android config qualifiers like night/land should not be treated as locales."""
+        base_path = os.path.join(self.temp_dir, "module1", "src", "main", "res")
+        self.create_strings_xml(os.path.join(base_path, "values", "strings.xml"))
+        self.create_strings_xml(os.path.join(base_path, "values-es", "strings.xml"))
+        self.create_strings_xml(os.path.join(base_path, "values-night", "strings.xml"))
+        self.create_strings_xml(os.path.join(base_path, "values-land", "strings.xml"))
+        self.create_strings_xml(os.path.join(base_path, "values-v31", "strings.xml"))
+
+        modules = find_resource_files(self.temp_dir)
+
+        self.assertEqual(len(modules), 1, "Should find one module")
+        module = list(modules.values())[0]
+        self.assertIn("default", module.language_resources)
+        self.assertIn("es", module.language_resources)
+        self.assertNotIn("night", module.language_resources)
+        self.assertNotIn("land", module.language_resources)
+        self.assertNotIn("v31", module.language_resources)
+
 
 class TestLanguageDetection(TestResourceParser):
     """Tests for language detection from resource paths."""
@@ -286,6 +305,37 @@ class TestLanguageDetection(TestResourceParser):
             self.assertEqual(
                 detected_lang, expected_lang, f"Failed to detect language from {path}"
             )
+
+    def test_detect_language_from_path_rejects_non_locale_qualifiers(self):
+        """Non-locale values qualifiers should not be accepted as languages."""
+        invalid_paths = [
+            Path(self.temp_dir)
+            / "module1"
+            / "src"
+            / "main"
+            / "res"
+            / "values-night"
+            / "strings.xml",
+            Path(self.temp_dir)
+            / "module1"
+            / "src"
+            / "main"
+            / "res"
+            / "values-land"
+            / "strings.xml",
+            Path(self.temp_dir)
+            / "module1"
+            / "src"
+            / "main"
+            / "res"
+            / "values-v31"
+            / "strings.xml",
+        ]
+
+        for path in invalid_paths:
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(ValueError, "Invalid Android locale qualifier"):
+                    detect_language_from_path(path)
 
 
 class TestResourceParsing(TestResourceParser):

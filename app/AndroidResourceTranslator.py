@@ -431,9 +431,11 @@ def find_resource_files(
     # 2. Otherwise, use patterns from .gitignore files with proper precedence
     if ignore_folders:
         logger.info(f"Using explicit ignore folders: {', '.join(ignore_folders)}")
+        ignored_folder_names = set(ignore_folders)
         gitignore_patterns = []
         all_gitignores = {}
     else:
+        ignored_folder_names = set()
         # Find all .gitignore files in the directory hierarchy
         all_gitignores = find_all_gitignores(resources_path)
         if all_gitignores:
@@ -455,7 +457,7 @@ def find_resource_files(
     for xml_file_path in resources_dir.rglob("strings.xml"):
         # Skip files in ignored directories
         if ignore_folders and any(
-            ignored in str(xml_file_path.parts) for ignored in ignore_folders
+            path_part in ignored_folder_names for path_part in xml_file_path.parts
         ):
             logger.debug(f"Skipping {xml_file_path} (matched ignore_folders)")
             continue

@@ -163,6 +163,37 @@ class TestFindResourceFiles(TestResourceParser):
             list(modules.values())[0].name, "module1", "Should only find module1"
         )
 
+    def test_ignore_folders_matches_exact_path_segments(self):
+        """Ignoring 'build' should not exclude paths like 'rebuild_module'."""
+        self.create_strings_xml(
+            os.path.join(
+                self.temp_dir,
+                "rebuild_module",
+                "src",
+                "main",
+                "res",
+                "values",
+                "strings.xml",
+            )
+        )
+        self.create_strings_xml(
+            os.path.join(
+                self.temp_dir,
+                "build",
+                "module2",
+                "src",
+                "main",
+                "res",
+                "values",
+                "strings.xml",
+            )
+        )
+
+        modules = find_resource_files(self.temp_dir, ignore_folders=["build"])
+
+        self.assertEqual(len(modules), 1, "Should find only the rebuild_module resource")
+        self.assertEqual(list(modules.values())[0].name, "rebuild_module")
+
     def test_gitignore_patterns(self):
         """Test that files matching gitignore patterns are skipped."""
         # Test gitignore pattern with explicit ignore_folders instead

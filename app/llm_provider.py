@@ -591,6 +591,8 @@ def translate_strings_batch_with_llm(
         Dictionary mapping string keys to translated texts
 
     Raises:
+        ValueError: If the LLM returns an empty translations array or omits any
+                    requested keys from the batch result
         Exception: For any API-related errors
     """
     if not strings_dict:

@@ -161,6 +161,7 @@ class TestReporting(unittest.TestCase):
         self.assertIn("welcome", log_output)
         self.assertIn("cancel", log_output)
         self.assertIn("items", log_output)
+        self.assertIn("plural groups: items", log_output)
 
         # Verify missing report structure
         self.assertIn("test_module", missing_report)
@@ -169,7 +170,8 @@ class TestReporting(unittest.TestCase):
             sorted(missing_report["test_module"]["es"]["strings"]),
             ["cancel", "welcome"],
         )
-        self.assertIn("items", missing_report["test_module"]["es"]["plurals"])
+        self.assertEqual(missing_report["test_module"]["es"]["plural_groups"], ["items"])
+        self.assertEqual(missing_report["test_module"]["es"]["plurals"], {})
 
     @patch("AndroidResourceTranslator.AndroidResourceFile.parse_file")
     def test_check_missing_translations_does_not_require_source_plural_keys(

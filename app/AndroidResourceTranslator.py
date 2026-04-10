@@ -1231,14 +1231,14 @@ def _collect_language_translations(
 
 
 def _format_missing_translations(
-    missing_strings: Set[str], missing_plurals: Dict[str, Set[str]]
+    missing_strings: Set[str], missing_plural_groups: Set[str]
 ) -> str:
     """
     Format missing translations for logging.
 
     Args:
         missing_strings: Set of missing string keys
-        missing_plurals: Dict of missing plural names and quantities
+        missing_plural_groups: Set of missing plural resource names
 
     Returns:
         Formatted string describing what's missing
@@ -1248,11 +1248,8 @@ def _format_missing_translations(
     if missing_strings:
         parts.append(f"strings: {', '.join(sorted(missing_strings))}")
 
-    if missing_plurals:
-        plurals_part = ", ".join(
-            [f"{k}({', '.join(sorted(v))})" for k, v in missing_plurals.items()]
-        )
-        parts.append(f"plurals: {plurals_part}")
+    if missing_plural_groups:
+        parts.append(f"plural groups: {', '.join(sorted(missing_plural_groups))}")
 
     return " | ".join(parts)
 
@@ -1260,7 +1257,10 @@ def _format_missing_translations(
 def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
     """
     For each module, compare non-default language resources against the union of keys
-    in the default language. Checks for missing <string> keys and missing plural quantities.
+    in the default language. Checks for missing <string> keys and missing plural
+    resource groups. Plural quantity keys are language-specific, so existing
+    target plural groups are not flagged for having different quantities from
+    the default locale.
 
     Args:
         modules: Dictionary of module identifiers to AndroidModule objects
@@ -1297,21 +1297,21 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
 
             # Find what's missing
             missing_strings = default_strings - lang_strings
-            missing_plurals: Dict[str, Set[str]] = {}
+            missing_plural_groups: Set[str] = set()
 
-            for plural_name, def_qty in default_plural_quantities.items():
+            for plural_name in default_plural_quantities:
                 current_qty = lang_plural_quantities.get(plural_name, set())
                 if not current_qty:
-                    missing_plurals[plural_name] = def_qty
+                    missing_plural_groups.add(plural_name)
 
             # Log and report if anything is missing
-            if missing_strings or missing_plurals:
+            if missing_strings or missing_plural_groups:
                 missing_count += 1
                 module_has_missing = True
 
                 # Format for logging
                 missing_description = _format_missing_translations(
-                    missing_strings, missing_plurals
+                    missing_strings, missing_plural_groups
                 )
                 module_log_lines.append(f"  [{lang}]: missing {missing_description}")
 
@@ -1320,10 +1320,8 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
                     missing_report[module.name] = {}
                 missing_report[module.name][lang] = {
                     "strings": list(missing_strings),
-                    "plurals": {
-                        name: list(quantities)
-                        for name, quantities in missing_plurals.items()
-                    },
+                    "plural_groups": sorted(missing_plural_groups),
+                    "plurals": {},
                 }
 
         # Log for this module

@@ -669,13 +669,14 @@ def translate_strings_batch_with_llm(
     # Validate that we got translations for all requested keys
     missing_keys = set(strings_dict.keys()) - set(translations.keys())
     if missing_keys:
-        logger.warning(
-            f"LLM did not provide translations for some keys: {missing_keys}. "
-            f"Using empty strings for missing translations."
+        logger.error(
+            "LLM did not provide translations for some keys: %s",
+            sorted(missing_keys),
         )
-        # Fill in missing translations with empty strings
-        for key in missing_keys:
-            translations[key] = ""
+        raise ValueError(
+            "LLM returned an incomplete translations array. Missing keys: "
+            + ", ".join(sorted(missing_keys))
+        )
 
     return translations
 

@@ -25,7 +25,7 @@ from string_utils import (
     escape_double_quotes,
     escape_special_chars,
 )
-from llm_provider import LLMConfig, LLMProvider
+from llm_provider import LLMConfig, LLMProvider, translate_strings_batch_with_llm
 
 
 class TestSpecialCharacterEscaping(unittest.TestCase):
@@ -280,6 +280,59 @@ class TestAutoTranslation(unittest.TestCase):
         self.assertIn("es", result["test_module"])
         self.assertIn("strings", result["test_module"]["es"])
         self.assertIn("plurals", result["test_module"]["es"])
+
+    @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
+    @patch("AndroidResourceTranslator.update_xml_file")
+    def test_auto_translate_raises_on_incomplete_batch_response(
+        self,
+        mock_update_xml,
+        mock_translate_strings_batch,
+    ):
+        """Partial string batches should fail instead of writing empty values."""
+        mock_translate_strings_batch.side_effect = ValueError(
+            "LLM returned an incomplete translations array. Missing keys: goodbye"
+        )
+
+        llm_config = LLMConfig(
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+        )
+
+        with self.assertRaisesRegex(ValueError, "Missing keys: goodbye"):
+            auto_translate_resources(
+                self.modules,
+                llm_config=llm_config,
+                project_context="Test project",
+            )
+
+        self.assertNotIn("goodbye", self.es_resource.strings)
+        mock_update_xml.assert_not_called()
+
+
+class TestBatchTranslationSafety(unittest.TestCase):
+    """Tests for safe handling of incomplete batch responses."""
+
+    def test_translate_strings_batch_raises_on_missing_keys(self):
+        """The adapter should reject partial LLM batch results."""
+
+        class FakeClient:
+            def __init__(self, config):
+                self.config = config
+
+            def chat_completion(self, **kwargs):
+                return {"translations": [{"key": "hello", "translation": "Hola"}]}
+
+        llm_config = LLMConfig(
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+        )
+
+        with patch("llm_provider.LLMClient", FakeClient):
+            with self.assertRaisesRegex(ValueError, "Missing keys: goodbye"):
+                translate_strings_batch_with_llm(
+                    strings_dict={"hello": "Hello", "goodbye": "Goodbye"},
+                    system_message="System",
+                    user_prompt="Prompt",
+                    llm_config=llm_config,
+                )
 
 
 if __name__ == "__main__":

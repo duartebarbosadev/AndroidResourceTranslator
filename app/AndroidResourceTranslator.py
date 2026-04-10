@@ -1114,9 +1114,12 @@ def auto_translate_resources(
                 missing_plurals = {}
                 for plural_name, default_map in module_default_plurals.items():
                     current_map = res.plurals.get(plural_name, {})
-                    if not current_map or set(current_map.keys()) != set(
-                        default_map.keys()
-                    ):
+
+                    # Treat an existing plural resource as complete regardless of the
+                    # specific quantity keys it contains. Plural categories are
+                    # language-specific, so the default locale's keys are not a safe
+                    # completeness contract for every target language.
+                    if not current_map:
                         missing_plurals[plural_name] = default_map
 
                 # Skip if nothing to translate
@@ -1298,9 +1301,8 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
 
             for plural_name, def_qty in default_plural_quantities.items():
                 current_qty = lang_plural_quantities.get(plural_name, set())
-                diff = def_qty - current_qty
-                if diff:
-                    missing_plurals[plural_name] = diff
+                if not current_qty:
+                    missing_plurals[plural_name] = def_qty
 
             # Log and report if anything is missing
             if missing_strings or missing_plurals:

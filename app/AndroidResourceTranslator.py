@@ -1053,8 +1053,10 @@ def _generate_translation_summary(translation_log: dict, total_translated: int) 
         return
 
     translated_info = {}
-    for module_name, lang_details in translation_log.items():
+    for lang_details in translation_log.values():
         for lang, details in lang_details.items():
+            if lang == "_module_name":
+                continue
             entry = translated_info.setdefault(
                 lang, {"strings": set(), "plurals": set()}
             )
@@ -1087,6 +1089,21 @@ def _generate_translation_summary(translation_log: dict, total_translated: int) 
         logger.info(" ".join(msg_parts))
 
 
+def _duplicate_module_names(modules: Dict[str, AndroidModule]) -> Set[str]:
+    """Return module short names that appear more than once."""
+    name_counts: Dict[str, int] = defaultdict(int)
+    for module in modules.values():
+        name_counts[module.name] += 1
+    return {name for name, count in name_counts.items() if count > 1}
+
+
+def _module_report_key(module: AndroidModule, duplicate_names: Set[str]) -> str:
+    """Use short names by default, falling back to unique identifiers for duplicates."""
+    if module.name in duplicate_names:
+        return module.identifier
+    return module.name
+
+
 def auto_translate_resources(
     modules: Dict[str, AndroidModule],
     llm_config: LLMConfig,
@@ -1105,6 +1122,7 @@ def auto_translate_resources(
     """
     translation_log = {}
     total_translated = 0
+    duplicate_names = _duplicate_module_names(modules)
 
     for module in modules.values():
         if "default" not in module.language_resources:
@@ -1118,13 +1136,17 @@ def auto_translate_resources(
             module
         )
 
+        module_report_key = _module_report_key(module, duplicate_names)
         # Process each non-default language
         for lang, resources in module.language_resources.items():
             if lang == "default":
                 continue
 
+            module_log = translation_log.setdefault(
+                module_report_key, {"_module_name": module.name}
+            )
             # Initialize translation log for this language
-            translation_log.setdefault(module.name, {})[lang] = {
+            module_log[lang] = {
                 "strings": [],
                 "plurals": [],
             }
@@ -1164,7 +1186,7 @@ def auto_translate_resources(
                         include_reference_context,
                         reference_context_limit,
                     )
-                    translation_log[module.name][lang]["strings"].extend(string_results)
+                    module_log[lang]["strings"].extend(string_results)
                     total_translated += len(string_results)
 
                 # Translate missing plurals
@@ -1179,7 +1201,7 @@ def auto_translate_resources(
                         include_reference_context,
                         reference_context_limit,
                     )
-                    translation_log[module.name][lang]["plurals"].extend(plural_results)
+                    module_log[lang]["plurals"].extend(plural_results)
                     total_translated += sum(
                         len(p["translations"]) for p in plural_results
                     )
@@ -1293,6 +1315,7 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
     logger.info("Missing Translations Report")
     missing_count = 0
     missing_report = {}
+    duplicate_names = _duplicate_module_names(modules)
 
     for module in modules.values():
         module_has_missing = False
@@ -1307,6 +1330,7 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
             module
         )
 
+        module_report_key = _module_report_key(module, duplicate_names)
         # Check each non-default language
         for lang, resources in sorted(module.language_resources.items()):
             if lang == "default":
@@ -1339,9 +1363,9 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
                 module_log_lines.append(f"  [{lang}]: missing {missing_description}")
 
                 # Add to the report dictionary
-                if module.name not in missing_report:
-                    missing_report[module.name] = {}
-                missing_report[module.name][lang] = {
+                if module_report_key not in missing_report:
+                    missing_report[module_report_key] = {"_module_name": module.name}
+                missing_report[module_report_key][lang] = {
                     "strings": list(missing_strings),
                     "plurals": {
                         name: list(quantities)
@@ -1374,12 +1398,20 @@ def create_translation_report(translation_log):
     report = "# Translation Report\n\n"
     has_translations = False
 
-    for module, languages in translation_log.items():
+    for module_identifier, languages in translation_log.items():
         module_has_translations = False
-        module_report = f"## Module: {module}\n\n"
+        module_name = languages.get("_module_name", module_identifier)
+        if module_name == module_identifier:
+            module_heading = module_name
+        else:
+            module_heading = f"{module_name} ({module_identifier})"
+
+        module_report = f"## Module: {module_heading}\n\n"
         languages_report = ""
 
         for lang, details in languages.items():
+            if lang == "_module_name":
+                continue
             has_string_translations = bool(details.get("strings"))
             has_plural_translations = bool(details.get("plurals"))
 

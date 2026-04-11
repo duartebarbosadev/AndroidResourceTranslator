@@ -10,7 +10,9 @@ This module tests the text translation and OpenAI integration features including
 
 import os
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 # Add parent directory to path for module import
@@ -19,6 +21,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from AndroidResourceTranslator import (
     auto_translate_resources,
     AndroidModule,
+    UpdatedDefaultResources,
+    detect_updated_default_resources,
+    _find_updated_default_resource_entries,
+    _normalize_github_event_path,
 )
 from string_utils import (
     escape_apostrophes,
@@ -202,6 +208,85 @@ class TestAutoTranslation(unittest.TestCase):
         # Build modules dict
         self.modules = {"test_id": self.module}
 
+    def test_find_updated_default_resource_entries_only_existing_changes(self):
+        """Only changed existing default entries should be marked for refresh."""
+        current_resource = MagicMock()
+        current_resource.strings = {
+            "hello": "Hello again",
+            "new": "New string",
+            "same": "Same",
+        }
+        current_resource.plurals = {
+            "days": {"one": "%d day left", "other": "%d days left"},
+            "new_plural": {"other": "%d new items"},
+            "same_plural": {"other": "%d item"},
+        }
+
+        updated = _find_updated_default_resource_entries(
+            previous_strings={"hello": "Hello", "same": "Same"},
+            previous_plurals={
+                "days": {"one": "%d day", "other": "%d days"},
+                "same_plural": {"other": "%d item"},
+            },
+            current_resource=current_resource,
+        )
+
+        self.assertEqual(updated.strings, {"hello"})
+        self.assertEqual(updated.plurals, {"days"})
+
+    def test_normalize_github_event_path_preserves_leading_dot_directories(self):
+        """Only a literal ./ prefix should be removed from event paths."""
+        self.assertEqual(
+            _normalize_github_event_path("./app/src/main/res/values/strings.xml"),
+            "app/src/main/res/values/strings.xml",
+        )
+        self.assertEqual(
+            _normalize_github_event_path(".github/workflows/translate.yml"),
+            ".github/workflows/translate.yml",
+        )
+
+    @patch("AndroidResourceTranslator._read_github_event_modified_paths")
+    @patch("AndroidResourceTranslator._resolve_previous_commit_ref")
+    @patch("AndroidResourceTranslator._run_git_command")
+    def test_detect_updated_default_resources_falls_back_to_modified_event_path(
+        self,
+        mock_run_git_command,
+        mock_resolve_previous_commit_ref,
+        mock_read_modified_paths,
+    ):
+        """A shallow GitHub checkout should refresh all entries in modified defaults."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = os.path.realpath(tmp_dir)
+            resource_path = os.path.join(
+                repo_root, "app", "src", "main", "res", "values", "strings.xml"
+            )
+
+            default_resource = MagicMock()
+            default_resource.path = Path(resource_path)
+            default_resource.strings = {"hello": "Hello", "goodbye": "Goodbye"}
+            default_resource.plurals = {"days": {"other": "%d days"}}
+
+            module = AndroidModule("test_module", "test_id")
+            module.language_resources["default"] = [default_resource]
+
+            def git_side_effect(args, cwd, text=True):
+                if args == ["rev-parse", "--show-toplevel"]:
+                    return repo_root
+                if args[:3] == ["status", "--porcelain", "--"]:
+                    return ""
+                return None
+
+            mock_run_git_command.side_effect = git_side_effect
+            mock_resolve_previous_commit_ref.return_value = None
+            mock_read_modified_paths.return_value = {
+                "app/src/main/res/values/strings.xml"
+            }
+
+            updated = detect_updated_default_resources({"test_id": module})
+
+        self.assertEqual(updated["test_id"].strings, {"hello", "goodbye"})
+        self.assertEqual(updated["test_id"].plurals, {"days"})
+
     @patch("AndroidResourceTranslator.translate_plurals_batch_with_llm")
     @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
     @patch("AndroidResourceTranslator.update_xml_file")
@@ -280,6 +365,102 @@ class TestAutoTranslation(unittest.TestCase):
         self.assertIn("es", result["test_module"])
         self.assertIn("strings", result["test_module"]["es"])
         self.assertIn("plurals", result["test_module"]["es"])
+
+    @patch("AndroidResourceTranslator.translate_plurals_batch_with_llm")
+    @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
+    @patch("AndroidResourceTranslator.update_xml_file")
+    def test_auto_translate_refreshes_updated_existing_string(
+        self,
+        mock_update_xml,
+        mock_translate_strings_batch,
+        mock_translate_plurals_batch,
+    ):
+        """Changed default strings should retranslate existing target entries."""
+        self.default_resource.strings = {
+            "hello": "Hello again",
+            "goodbye": "Goodbye",
+        }
+        self.es_resource.strings = {
+            "hello": "Hola Mundo",
+            "goodbye": "Adiós",
+        }
+        self.es_resource.plurals = {
+            "days": {"one": "%d día", "other": "%d días"},
+        }
+        mock_translate_strings_batch.return_value = {"hello": "Hola de nuevo"}
+
+        llm_config = LLMConfig(
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+        )
+
+        result = auto_translate_resources(
+            self.modules,
+            llm_config=llm_config,
+            project_context="Test project",
+            updated_default_resources={
+                "test_id": UpdatedDefaultResources(strings={"hello"})
+            },
+        )
+
+        mock_translate_strings_batch.assert_called_once()
+        strings_payload = mock_translate_strings_batch.call_args.kwargs["strings_dict"]
+        self.assertEqual(strings_payload, {"hello": "Hello again"})
+        mock_translate_plurals_batch.assert_not_called()
+        mock_update_xml.assert_called_once_with(self.es_resource)
+        self.assertEqual(self.es_resource.strings["hello"], "Hola de nuevo")
+        self.assertEqual(
+            result["test_module"]["es"]["strings"][0]["source"], "Hello again"
+        )
+
+    @patch("AndroidResourceTranslator.translate_plurals_batch_with_llm")
+    @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
+    @patch("AndroidResourceTranslator.update_xml_file")
+    def test_auto_translate_refreshes_updated_existing_plural(
+        self,
+        mock_update_xml,
+        mock_translate_strings_batch,
+        mock_translate_plurals_batch,
+    ):
+        """Changed default plurals should replace existing target plural entries."""
+        self.es_resource.strings = {
+            "hello": "Hola Mundo",
+            "goodbye": "Adiós",
+        }
+        self.es_resource.plurals = {
+            "days": {
+                "one": "%d día antiguo",
+                "few": "%d días antiguos",
+                "other": "%d días antiguos",
+            }
+        }
+        mock_translate_plurals_batch.return_value = {
+            "days": {"one": "%d día nuevo", "other": "%d días nuevos"}
+        }
+
+        llm_config = LLMConfig(
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+        )
+
+        auto_translate_resources(
+            self.modules,
+            llm_config=llm_config,
+            project_context="Test project",
+            updated_default_resources={
+                "test_id": UpdatedDefaultResources(plurals={"days"})
+            },
+        )
+
+        mock_translate_strings_batch.assert_not_called()
+        mock_translate_plurals_batch.assert_called_once()
+        plurals_payload = mock_translate_plurals_batch.call_args.kwargs["plurals_dict"]
+        self.assertEqual(
+            plurals_payload, {"days": {"one": "%d day", "other": "%d days"}}
+        )
+        mock_update_xml.assert_called_once_with(self.es_resource)
+        self.assertEqual(
+            self.es_resource.plurals["days"],
+            {"one": "%d día nuevo", "other": "%d días nuevos"},
+        )
 
     @patch("AndroidResourceTranslator.translate_plurals_batch_with_llm")
     @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")

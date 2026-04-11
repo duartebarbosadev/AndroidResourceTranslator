@@ -179,5 +179,3 @@ For detailed guidelines on how to contribute, please see our [Contributing Guide
 This project is licensed under the [MIT License](./LICENSE).
 
 If you have any questions or need assistance, feel free to open an issue or reach out.
-
-*Built with ❤️ by [Duarte Barbosa](https://github.com/duartebarbosadev).*

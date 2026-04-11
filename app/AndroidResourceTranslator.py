@@ -10,9 +10,12 @@ import logging
 import sys
 import re
 import os
+import json
+import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 from collections import defaultdict
-from typing import Any, Dict, Set, List, Tuple
+from typing import Any, Dict, Set, List, Tuple, Optional, Union
 from lxml import etree
 from language_utils import get_language_name
 from string_utils import escape_special_chars
@@ -155,6 +158,17 @@ _BCP47_LOCALE_QUALIFIER_PATTERN = re.compile(
 )
 
 
+@dataclass
+class UpdatedDefaultResources:
+    """Default resource names whose source text changed and need retranslation."""
+
+    strings: Set[str] = field(default_factory=set)
+    plurals: Set[str] = field(default_factory=set)
+
+    def has_updates(self) -> bool:
+        return bool(self.strings or self.plurals)
+
+
 def _create_secure_fragment_parser() -> etree.XMLParser:
     """Return an XML parser configured to avoid external entity resolution."""
     return etree.XMLParser(
@@ -186,6 +200,50 @@ def _serialize_inner_xml(element) -> str:
             segments.append(child.tail)
 
     return _normalize_inner_xml("".join(segments))
+
+
+def _extract_resource_entries(root) -> Tuple[Dict[str, str], Dict[str, Dict[str, str]]]:
+    """Extract translatable string and plural entries from a resources root."""
+    strings: Dict[str, str] = {}
+    plurals: Dict[str, Dict[str, str]] = {}
+
+    for elem in root:
+        translatable = elem.attrib.get("translatable", "true").lower()
+        if translatable == "false":
+            continue
+
+        if elem.tag == "string":
+            name = elem.attrib.get("name")
+            if name:
+                strings[name] = _serialize_inner_xml(elem)
+        elif elem.tag == "plurals":
+            name = elem.attrib.get("name")
+            if name:
+                quantities: Dict[str, str] = {}
+                for item in elem.findall("item"):
+                    quantity = item.attrib.get("quantity")
+                    if quantity:
+                        quantities[quantity] = _serialize_inner_xml(item)
+                plurals[name] = quantities
+
+    return strings, plurals
+
+
+def _parse_resource_xml_content(
+    content: bytes, path_label: str
+) -> Tuple[Dict[str, str], Dict[str, Dict[str, str]]]:
+    """Parse strings.xml content loaded from a source other than the filesystem."""
+    try:
+        parser = etree.XMLParser(
+            remove_blank_text=False,
+            resolve_entities=False,
+            no_network=True,
+        )
+        root = etree.fromstring(content, parser=parser)
+        return _extract_resource_entries(root)
+    except etree.XMLSyntaxError as pe:
+        logger.warning(f"XML parse error in previous version of {path_label}: {pe}")
+        return {}, {}
 
 
 def _set_element_inner_xml(element, content: str) -> None:
@@ -276,26 +334,7 @@ class AndroidResourceFile:
             parser = etree.XMLParser(remove_blank_text=False)
             tree = etree.parse(str(self.path), parser)
             root = tree.getroot()
-            for elem in root:
-                translatable = elem.attrib.get("translatable", "true").lower()
-                if translatable == "false":
-                    continue
-
-                if elem.tag == "string":
-                    name = elem.attrib.get("name")
-                    if name:
-                        full_text = _serialize_inner_xml(elem)
-                        self.strings[name] = full_text
-                elif elem.tag == "plurals":
-                    name = elem.attrib.get("name")
-                    if name:
-                        quantities: Dict[str, str] = {}
-                        for item in elem.findall("item"):
-                            quantity = item.attrib.get("quantity")
-                            if quantity:
-                                full_text = _serialize_inner_xml(item)
-                                quantities[quantity] = full_text
-                        self.plurals[name] = quantities
+            self.strings, self.plurals = _extract_resource_entries(root)
             logger.debug(
                 f"Parsed {len(self.strings)} strings and {len(self.plurals)} plurals from {self.path}"
             )
@@ -521,6 +560,224 @@ def find_resource_files(
         modules[module_key].add_resource(language, resource_file)
 
     return modules
+
+
+def _run_git_command(
+    args: List[str], cwd: Path, text: bool = True
+) -> Optional[Union[str, bytes]]:
+    """Run a git command and return stdout, or None when git data is unavailable."""
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=str(cwd),
+            capture_output=True,
+            text=text,
+            check=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+
+    return result.stdout.strip() if text else result.stdout
+
+
+def _git_commit_exists(repo_root: Path, ref: str) -> bool:
+    return _run_git_command(["cat-file", "-e", f"{ref}^{{commit}}"], repo_root) == ""
+
+
+def _read_github_event_before_sha() -> Optional[str]:
+    event = _read_github_event()
+    if not event:
+        return None
+
+    before = event.get("before")
+    if isinstance(before, str) and before and set(before) != {"0"}:
+        return before
+
+    pull_request = event.get("pull_request")
+    if isinstance(pull_request, dict):
+        base = pull_request.get("base")
+        if isinstance(base, dict):
+            sha = base.get("sha")
+            if isinstance(sha, str) and sha:
+                return sha
+
+    return None
+
+
+def _read_github_event() -> Optional[Dict[str, Any]]:
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if not event_path:
+        return None
+
+    try:
+        with open(event_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _normalize_github_event_path(path: str) -> str:
+    """Normalize GitHub event paths without stripping leading-dot directories."""
+    return path[2:] if path.startswith("./") else path
+
+
+def _read_github_event_modified_paths() -> Set[str]:
+    event = _read_github_event()
+    if not event:
+        return set()
+
+    modified_paths: Set[str] = set()
+    commits = event.get("commits", [])
+    if isinstance(commits, list):
+        for commit in commits:
+            if not isinstance(commit, dict):
+                continue
+            modified = commit.get("modified", [])
+            if isinstance(modified, list):
+                modified_paths.update(
+                    _normalize_github_event_path(path)
+                    for path in modified
+                    if isinstance(path, str)
+                )
+
+    head_commit = event.get("head_commit")
+    if isinstance(head_commit, dict):
+        modified = head_commit.get("modified", [])
+        if isinstance(modified, list):
+            modified_paths.update(
+                _normalize_github_event_path(path)
+                for path in modified
+                if isinstance(path, str)
+            )
+
+    return modified_paths
+
+
+def _resolve_previous_commit_ref(repo_root: Path) -> Optional[str]:
+    """
+    Resolve a previous commit for GitHub Action runs.
+
+    Local runs only use uncommitted file changes, avoiding repeated retranslation of
+    whatever happened to change in the most recent commit.
+    """
+    if os.environ.get("GITHUB_ACTIONS", "false").lower() != "true":
+        return None
+
+    event_before = _read_github_event_before_sha()
+    if event_before and _git_commit_exists(repo_root, event_before):
+        return event_before
+
+    if _git_commit_exists(repo_root, "HEAD^"):
+        return "HEAD^"
+
+    return None
+
+
+def _path_has_worktree_changes(repo_root: Path, rel_path: str) -> bool:
+    status = _run_git_command(["status", "--porcelain", "--", rel_path], repo_root)
+    return bool(status)
+
+
+def _read_git_file(repo_root: Path, ref: str, rel_path: str) -> Optional[bytes]:
+    output = _run_git_command(["show", f"{ref}:{rel_path}"], repo_root, text=False)
+    return output if isinstance(output, bytes) else None
+
+
+def _find_updated_default_resource_entries(
+    previous_strings: Dict[str, str],
+    previous_plurals: Dict[str, Dict[str, str]],
+    current_resource: AndroidResourceFile,
+) -> UpdatedDefaultResources:
+    updated = UpdatedDefaultResources()
+
+    for key, current_value in current_resource.strings.items():
+        if key in previous_strings and previous_strings[key] != current_value:
+            updated.strings.add(key)
+
+    for plural_name, current_quantities in current_resource.plurals.items():
+        if (
+            plural_name in previous_plurals
+            and previous_plurals[plural_name] != current_quantities
+        ):
+            updated.plurals.add(plural_name)
+
+    return updated
+
+
+def detect_updated_default_resources(
+    modules: Dict[str, AndroidModule],
+) -> Dict[str, UpdatedDefaultResources]:
+    """
+    Detect default strings/plurals whose source text changed since the prior version.
+
+    This lets existing localized entries be refreshed instead of only filling missing
+    keys. Local runs compare uncommitted changes against HEAD; GitHub Action runs
+    compare the checked-out commit against the event's previous commit when present.
+    """
+    repo_root_output = _run_git_command(["rev-parse", "--show-toplevel"], Path.cwd())
+    if not isinstance(repo_root_output, str):
+        return {}
+
+    repo_root = Path(repo_root_output)
+    previous_commit_ref = _resolve_previous_commit_ref(repo_root)
+    github_modified_paths = _read_github_event_modified_paths()
+    updated_by_module: Dict[str, UpdatedDefaultResources] = {}
+
+    for module in modules.values():
+        for resource in module.language_resources.get("default", []):
+            try:
+                rel_path = resource.path.resolve().relative_to(repo_root).as_posix()
+            except ValueError:
+                continue
+
+            previous_ref = None
+            if _path_has_worktree_changes(repo_root, rel_path):
+                previous_ref = "HEAD"
+            elif previous_commit_ref:
+                previous_ref = previous_commit_ref
+
+            updated = None
+            if previous_ref:
+                previous_content = _read_git_file(repo_root, previous_ref, rel_path)
+                if previous_content is None:
+                    if rel_path not in github_modified_paths:
+                        continue
+                else:
+                    previous_strings, previous_plurals = _parse_resource_xml_content(
+                        previous_content, rel_path
+                    )
+                    updated = _find_updated_default_resource_entries(
+                        previous_strings,
+                        previous_plurals,
+                        resource,
+                    )
+
+            if updated is None:
+                if rel_path not in github_modified_paths:
+                    continue
+                updated = UpdatedDefaultResources(
+                    strings=set(resource.strings.keys()),
+                    plurals=set(resource.plurals.keys()),
+                )
+
+            if not updated.has_updates():
+                continue
+
+            module_updated = updated_by_module.setdefault(
+                module.identifier, UpdatedDefaultResources()
+            )
+            module_updated.strings.update(updated.strings)
+            module_updated.plurals.update(updated.plurals)
+
+    for module_key, updated in updated_by_module.items():
+        logger.info(
+            "Detected updated default resources for module '%s': strings=%s, plurals=%s",
+            module_key,
+            ", ".join(sorted(updated.strings)) or "none",
+            ", ".join(sorted(updated.plurals)) or "none",
+        )
+
+    return updated_by_module
 
 
 def update_xml_file(resource: AndroidResourceFile) -> None:
@@ -823,7 +1080,9 @@ def _translate_missing_strings(
     # Handle empty strings separately
     for key in sorted(missing_strings):
         if module_default_strings[key].strip() == "":
-            res.strings[key] = ""
+            if res.strings.get(key) != "":
+                res.strings[key] = ""
+                res.modified = True
 
     if not non_empty_strings:
         return results
@@ -918,6 +1177,7 @@ def _translate_missing_plurals(
     project_context: str,
     include_reference_context: bool,
     reference_context_limit: int,
+    replace_existing_plurals: Optional[Set[str]] = None,
 ) -> List[Dict]:
     """
     Helper function to translate missing plurals for a resource file.
@@ -940,6 +1200,8 @@ def _translate_missing_plurals(
 
     if not missing_plurals:
         return results
+
+    replace_existing_plurals = replace_existing_plurals or set()
 
     # Get the language name for prompts
     language_name = get_language_name(lang)
@@ -1005,10 +1267,13 @@ def _translate_missing_plurals(
                         translated_text, reference_text=reference_text
                     )
 
-                # Merge with existing translations, preserving already translated values
-                merged = current_map.copy()
-                merged.update(sanitized_plural)
-                res.plurals[plural_name] = merged
+                if plural_name in replace_existing_plurals:
+                    res.plurals[plural_name] = sanitized_plural
+                else:
+                    # Merge with existing translations, preserving already translated values
+                    merged = current_map.copy()
+                    merged.update(sanitized_plural)
+                    res.plurals[plural_name] = merged
                 res.modified = True
 
                 logger.info(
@@ -1118,9 +1383,11 @@ def auto_translate_resources(
     project_context: str,
     include_reference_context: bool = True,
     reference_context_limit: int = DEFAULT_REFERENCE_CONTEXT_LIMIT,
+    updated_default_resources: Dict[str, UpdatedDefaultResources] = None,
 ) -> dict:
     """
-    For each non-default language resource, auto-translate missing strings and plural items.
+    For each non-default language resource, auto-translate missing strings/plurals
+    and refresh entries whose default source text changed.
     Returns a translation_log dictionary with details of the translations performed.
 
     Args:
@@ -1131,6 +1398,7 @@ def auto_translate_resources(
     translation_log = {}
     total_translated = 0
     duplicate_names = _duplicate_module_names(modules)
+    updated_default_resources = updated_default_resources or {}
 
     for module in modules.values():
         if "default" not in module.language_resources:
@@ -1145,6 +1413,9 @@ def auto_translate_resources(
         )
 
         module_report_key = _module_report_key(module, duplicate_names)
+        module_updates = updated_default_resources.get(
+            module.identifier, UpdatedDefaultResources()
+        )
         # Process each non-default language
         for lang, resources in module.language_resources.items():
             if lang == "default":
@@ -1164,6 +1435,12 @@ def auto_translate_resources(
                 missing_strings = set(module_default_strings.keys()) - set(
                     res.strings.keys()
                 )
+                updated_strings = {
+                    key
+                    for key in module_updates.strings
+                    if key in module_default_strings and key in res.strings
+                }
+                strings_to_translate = missing_strings | updated_strings
 
                 # Find missing plurals
                 missing_plurals = {}
@@ -1176,20 +1453,28 @@ def auto_translate_resources(
                     # completeness contract for every target language.
                     if not current_map:
                         missing_plurals[plural_name] = default_map
+                    elif plural_name in module_updates.plurals:
+                        missing_plurals[plural_name] = default_map
+
+                updated_plurals = {
+                    plural_name
+                    for plural_name in module_updates.plurals
+                    if plural_name in missing_plurals and plural_name in res.plurals
+                }
 
                 # Skip if nothing to translate
-                if not missing_strings and not missing_plurals:
+                if not strings_to_translate and not missing_plurals:
                     continue
 
                 logger.info(
-                    f"Auto-translating missing resources for module '{module.name}', language '{lang}'"
+                    f"Auto-translating resources for module '{module.name}', language '{lang}'"
                 )
 
                 # Translate missing strings
-                if missing_strings:
+                if strings_to_translate:
                     string_results = _translate_missing_strings(
                         res,
-                        missing_strings,
+                        strings_to_translate,
                         module_default_strings,
                         lang,
                         llm_config,
@@ -1211,6 +1496,7 @@ def auto_translate_resources(
                         project_context,
                         include_reference_context,
                         reference_context_limit,
+                        replace_existing_plurals=updated_plurals,
                     )
                     module_log[lang]["plurals"].extend(plural_results)
                     total_translated += sum(
@@ -1782,6 +2068,8 @@ def main() -> None:
         for module in sorted(merged_modules.values(), key=lambda m: m.name):
             module.print_resources()
 
+    updated_default_resources = detect_updated_default_resources(merged_modules)
+
     translation_log = {}
     # If not in dry-run mode, run the translation process.
     if not dry_run:
@@ -1810,6 +2098,7 @@ def main() -> None:
             project_context,
             include_reference_context=should_include_reference_context,
             reference_context_limit=reference_context_limit,
+            updated_default_resources=updated_default_resources,
         )
 
     # Whether or not auto-translation was performed, still check for missing translations.

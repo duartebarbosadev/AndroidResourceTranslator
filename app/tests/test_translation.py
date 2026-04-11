@@ -281,6 +281,98 @@ class TestAutoTranslation(unittest.TestCase):
         self.assertIn("strings", result["test_module"]["es"])
         self.assertIn("plurals", result["test_module"]["es"])
 
+    @patch("AndroidResourceTranslator.translate_plurals_batch_with_llm")
+    @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
+    @patch("AndroidResourceTranslator.update_xml_file")
+    def test_auto_translate_skips_plurals_when_target_has_extra_valid_forms(
+        self,
+        mock_update_xml,
+        mock_translate_strings_batch,
+        mock_translate_plurals_batch,
+    ):
+        """Extra locale-specific plural forms should not trigger retranslation."""
+        module = AndroidModule("test_module", "test_id")
+
+        default_resource = MagicMock()
+        default_resource.strings = {}
+        default_resource.plurals = {"days": {"other": "%d days"}}
+        default_resource.modified = False
+
+        sv_resource = MagicMock()
+        sv_resource.strings = {}
+        sv_resource.plurals = {
+            "days": {
+                "one": "%d dag",
+                "few": "%d dagar",
+                "other": "%d dagar",
+            }
+        }
+        sv_resource.modified = False
+
+        module.add_resource("default", default_resource)
+        module.add_resource("sv", sv_resource)
+
+        llm_config = LLMConfig(
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+        )
+
+        result = auto_translate_resources(
+            {"test_id": module},
+            llm_config=llm_config,
+            project_context="Test project",
+        )
+
+        mock_translate_strings_batch.assert_not_called()
+        mock_translate_plurals_batch.assert_not_called()
+        mock_update_xml.assert_not_called()
+        self.assertFalse(sv_resource.modified)
+        self.assertEqual(sv_resource.plurals["days"]["few"], "%d dagar")
+        self.assertEqual(result["test_module"]["sv"]["plurals"], [])
+
+    @patch("AndroidResourceTranslator.translate_plurals_batch_with_llm")
+    @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
+    @patch("AndroidResourceTranslator.update_xml_file")
+    def test_auto_translate_skips_existing_plural_when_target_only_has_other(
+        self,
+        mock_update_xml,
+        mock_translate_strings_batch,
+        mock_translate_plurals_batch,
+    ):
+        """A target plural that already exists should not be retransmitted."""
+        module = AndroidModule("test_module", "test_id")
+
+        default_resource = MagicMock()
+        default_resource.strings = {}
+        default_resource.plurals = {
+            "days": {"one": "%d day", "few": "%d days", "other": "%d days"}
+        }
+        default_resource.modified = False
+
+        target_resource = MagicMock()
+        target_resource.strings = {}
+        target_resource.plurals = {"days": {"other": "%d dias"}}
+        target_resource.modified = False
+
+        module.add_resource("default", default_resource)
+        module.add_resource("pt", target_resource)
+
+        llm_config = LLMConfig(
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+        )
+
+        result = auto_translate_resources(
+            {"test_id": module},
+            llm_config=llm_config,
+            project_context="Test project",
+        )
+
+        mock_translate_strings_batch.assert_not_called()
+        mock_translate_plurals_batch.assert_not_called()
+        mock_update_xml.assert_not_called()
+        self.assertFalse(target_resource.modified)
+        self.assertEqual(target_resource.plurals["days"], {"other": "%d dias"})
+        self.assertEqual(result["test_module"]["pt"]["plurals"], [])
+
     @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
     @patch("AndroidResourceTranslator.update_xml_file")
     def test_auto_translate_raises_on_incomplete_batch_response(

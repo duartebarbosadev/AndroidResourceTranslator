@@ -30,6 +30,30 @@ from AndroidResourceTranslator import (
 class TestResourceParser(unittest.TestCase):
     """Tests for Android resource file parsing functionality."""
 
+    VALID_RESOURCE_FOLDER_LANGUAGES = {
+        "values": "default",
+        "values-b+sr+Latn": "b+sr+Latn",
+        "values-ca": "ca",
+        "values-el": "el",
+        "values-es": "es",
+        "values-fi-rFI": "fi-rFI",
+        "values-hr": "hr",
+        "values-hu": "hu",
+        "values-it": "it",
+        "values-mr": "mr",
+        "values-nb-rNO": "nb-rNO",
+        "values-nl": "nl",
+        "values-pt": "pt",
+        "values-pt-rBR": "pt-rBR",
+        "values-ro": "ro",
+        "values-sr": "sr",
+        "values-sv-rSE": "sv-rSE",
+        "values-ta-rIN": "ta-rIN",
+        "values-vi": "vi",
+        "values-zh-rCN": "zh-rCN",
+        "values-zh-rTW": "zh-rTW",
+    }
+
     def setUp(self):
         """Set up a temporary directory for file-based tests."""
         self.temp_dir = tempfile.mkdtemp()
@@ -283,55 +307,42 @@ class TestFindResourceFiles(TestResourceParser):
         self.assertNotIn("land", module.language_resources)
         self.assertNotIn("v31", module.language_resources)
 
+    def test_find_resource_files_accepts_supported_locale_values_folders(self):
+        """All supported locale values folders should be discovered as languages."""
+        base_path = os.path.join(self.temp_dir, "module1", "src", "main", "res")
+        for folder_name in self.VALID_RESOURCE_FOLDER_LANGUAGES:
+            self.create_strings_xml(os.path.join(base_path, folder_name, "strings.xml"))
+
+        self.create_strings_xml(
+            os.path.join(base_path, "mipmap-mdpi", "strings.xml")
+        )
+
+        modules = find_resource_files(self.temp_dir)
+
+        self.assertEqual(len(modules), 1, "Should find one module")
+        module = list(modules.values())[0]
+        self.assertEqual(
+            set(module.language_resources.keys()),
+            set(self.VALID_RESOURCE_FOLDER_LANGUAGES.values()),
+        )
+        self.assertNotIn("mipmap-mdpi", module.language_resources)
+
 
 class TestLanguageDetection(TestResourceParser):
     """Tests for language detection from resource paths."""
 
     def test_detect_language_from_path(self):
         """Test language detection from resource directory names."""
-        test_cases = [
-            (
+        for folder_name, expected_lang in self.VALID_RESOURCE_FOLDER_LANGUAGES.items():
+            path = (
                 Path(self.temp_dir)
                 / "module1"
                 / "src"
                 / "main"
                 / "res"
-                / "values"
-                / "strings.xml",
-                "default",
-            ),
-            (
-                Path(self.temp_dir)
-                / "module1"
-                / "src"
-                / "main"
-                / "res"
-                / "values-es"
-                / "strings.xml",
-                "es",
-            ),
-            (
-                Path(self.temp_dir)
-                / "module1"
-                / "src"
-                / "main"
-                / "res"
-                / "values-zh-rCN"
-                / "strings.xml",
-                "zh-rCN",
-            ),
-            (
-                Path(self.temp_dir)
-                / "module1"
-                / "src"
-                / "main"
-                / "res"
-                / "values-b+sr+Latn"
-                / "strings.xml",
-                "b+sr+Latn",
-            ),
-        ]
-        for path, expected_lang in test_cases:
+                / folder_name
+                / "strings.xml"
+            )
             detected_lang = detect_language_from_path(path)
             self.assertEqual(
                 detected_lang, expected_lang, f"Failed to detect language from {path}"

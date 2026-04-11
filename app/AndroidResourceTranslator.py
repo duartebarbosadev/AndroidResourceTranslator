@@ -616,6 +616,11 @@ def _read_github_event() -> Optional[Dict[str, Any]]:
         return None
 
 
+def _normalize_github_event_path(path: str) -> str:
+    """Normalize GitHub event paths without stripping leading-dot directories."""
+    return path[2:] if path.startswith("./") else path
+
+
 def _read_github_event_modified_paths() -> Set[str]:
     event = _read_github_event()
     if not event:
@@ -630,7 +635,9 @@ def _read_github_event_modified_paths() -> Set[str]:
             modified = commit.get("modified", [])
             if isinstance(modified, list):
                 modified_paths.update(
-                    path.lstrip("./") for path in modified if isinstance(path, str)
+                    _normalize_github_event_path(path)
+                    for path in modified
+                    if isinstance(path, str)
                 )
 
     head_commit = event.get("head_commit")
@@ -638,7 +645,9 @@ def _read_github_event_modified_paths() -> Set[str]:
         modified = head_commit.get("modified", [])
         if isinstance(modified, list):
             modified_paths.update(
-                path.lstrip("./") for path in modified if isinstance(path, str)
+                _normalize_github_event_path(path)
+                for path in modified
+                if isinstance(path, str)
             )
 
     return modified_paths
@@ -1168,7 +1177,7 @@ def _translate_missing_plurals(
     project_context: str,
     include_reference_context: bool,
     reference_context_limit: int,
-    replace_existing_plurals: Set[str] = None,
+    replace_existing_plurals: Optional[Set[str]] = None,
 ) -> List[Dict]:
     """
     Helper function to translate missing plurals for a resource file.

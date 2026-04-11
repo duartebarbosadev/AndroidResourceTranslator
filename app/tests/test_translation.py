@@ -24,6 +24,7 @@ from AndroidResourceTranslator import (
     UpdatedDefaultResources,
     detect_updated_default_resources,
     _find_updated_default_resource_entries,
+    _normalize_github_event_path,
 )
 from string_utils import (
     escape_apostrophes,
@@ -232,6 +233,17 @@ class TestAutoTranslation(unittest.TestCase):
 
         self.assertEqual(updated.strings, {"hello"})
         self.assertEqual(updated.plurals, {"days"})
+
+    def test_normalize_github_event_path_preserves_leading_dot_directories(self):
+        """Only a literal ./ prefix should be removed from event paths."""
+        self.assertEqual(
+            _normalize_github_event_path("./app/src/main/res/values/strings.xml"),
+            "app/src/main/res/values/strings.xml",
+        )
+        self.assertEqual(
+            _normalize_github_event_path(".github/workflows/translate.yml"),
+            ".github/workflows/translate.yml",
+        )
 
     @patch("AndroidResourceTranslator._read_github_event_modified_paths")
     @patch("AndroidResourceTranslator._resolve_previous_commit_ref")

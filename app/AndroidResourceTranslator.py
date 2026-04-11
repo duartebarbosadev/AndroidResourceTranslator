@@ -354,14 +354,20 @@ def detect_language_from_path(file_path: Path) -> str:
       - "values-zh-rCN"    -> "zh-rCN" (Chinese Simplified)
       - "values-b+sr+Latn" -> "b+sr+Latn" (Serbian in Latin script)
 
-    The function tries to match the standard pattern first (values-XX),
-    and falls back to a simpler replacement if the pattern doesn't match.
+    The function accepts only Android locale qualifiers in standard form
+    (e.g., values-es, values-pt-rPT) or BCP 47 form (e.g., values-b+sr+Latn).
+    Non-locale configuration qualifiers such as values-night or values-v31 are
+    rejected.
 
     Args:
         file_path: Path object pointing to a resource file
 
     Returns:
         String representing the language code, or "default" for the base language
+
+    Raises:
+        ValueError: If the parent directory is not "values" or a valid locale
+                    resource directory.
     """
     values_dir = file_path.parent.name
 

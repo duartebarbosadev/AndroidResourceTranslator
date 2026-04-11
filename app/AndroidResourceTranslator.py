@@ -147,6 +147,13 @@ Translate the following string provided after the dashed line to language: {targ
 
 logger = logging.getLogger(__name__)
 
+_STANDARD_LOCALE_QUALIFIER_PATTERN = re.compile(
+    r"^[a-z]{2,3}(?:-r(?:[A-Z]{2}|\d{3}))?$"
+)
+_BCP47_LOCALE_QUALIFIER_PATTERN = re.compile(
+    r"^b\+[A-Za-z]{2,3}(?:\+[A-Za-z]{4})?(?:\+(?:[A-Z]{2}|\d{3}))?$"
+)
+
 
 def _create_secure_fragment_parser() -> etree.XMLParser:
     """Return an XML parser configured to avoid external entity resolution."""
@@ -347,14 +354,20 @@ def detect_language_from_path(file_path: Path) -> str:
       - "values-zh-rCN"    -> "zh-rCN" (Chinese Simplified)
       - "values-b+sr+Latn" -> "b+sr+Latn" (Serbian in Latin script)
 
-    The function tries to match the standard pattern first (values-XX),
-    and falls back to a simpler replacement if the pattern doesn't match.
+    The function accepts only Android locale qualifiers in standard form
+    (e.g., values-es, values-pt-rPT) or BCP 47 form (e.g., values-b+sr+Latn).
+    Non-locale configuration qualifiers such as values-night or values-v31 are
+    rejected.
 
     Args:
         file_path: Path object pointing to a resource file
 
     Returns:
         String representing the language code, or "default" for the base language
+
+    Raises:
+        ValueError: If the parent directory is not "values" or a valid locale
+                    resource directory.
     """
     values_dir = file_path.parent.name
 
@@ -371,6 +384,16 @@ def detect_language_from_path(file_path: Path) -> str:
         )
 
     language = match.group(1)
+    if not (
+        _STANDARD_LOCALE_QUALIFIER_PATTERN.fullmatch(language)
+        or _BCP47_LOCALE_QUALIFIER_PATTERN.fullmatch(language)
+    ):
+        raise ValueError(
+            f"Invalid Android locale qualifier: '{values_dir}'. "
+            "Expected a locale folder such as 'values-es', 'values-pt-rPT', "
+            "or 'values-b+sr+Latn'."
+        )
+
     logger.debug(f"Detected language '{language}' from {values_dir}")
     return language
 
@@ -414,9 +437,11 @@ def find_resource_files(
     # 2. Otherwise, use patterns from .gitignore files with proper precedence
     if ignore_folders:
         logger.info(f"Using explicit ignore folders: {', '.join(ignore_folders)}")
+        ignored_folder_names = set(ignore_folders)
         gitignore_patterns = []
         all_gitignores = {}
     else:
+        ignored_folder_names = set()
         # Find all .gitignore files in the directory hierarchy
         all_gitignores = find_all_gitignores(resources_path)
         if all_gitignores:
@@ -438,7 +463,7 @@ def find_resource_files(
     for xml_file_path in resources_dir.rglob("strings.xml"):
         # Skip files in ignored directories
         if ignore_folders and any(
-            ignored in str(xml_file_path.parts) for ignored in ignore_folders
+            path_part in ignored_folder_names for path_part in xml_file_path.parts
         ):
             logger.debug(f"Skipping {xml_file_path} (matched ignore_folders)")
             continue
@@ -460,7 +485,15 @@ def find_resource_files(
             continue
 
         # Detect which language this resource file is for
-        language = detect_language_from_path(xml_file_path)
+        try:
+            language = detect_language_from_path(xml_file_path)
+        except ValueError:
+            logger.debug(
+                "Skipping %s because '%s' is not a locale resource directory",
+                xml_file_path,
+                xml_file_path.parent.name,
+            )
+            continue
 
         try:
             # Identify the module based on the project structure
@@ -1028,8 +1061,10 @@ def _generate_translation_summary(translation_log: dict, total_translated: int) 
         return
 
     translated_info = {}
-    for module_name, lang_details in translation_log.items():
+    for lang_details in translation_log.values():
         for lang, details in lang_details.items():
+            if lang == "_module_name":
+                continue
             entry = translated_info.setdefault(
                 lang, {"strings": set(), "plurals": set()}
             )
@@ -1062,6 +1097,21 @@ def _generate_translation_summary(translation_log: dict, total_translated: int) 
         logger.info(" ".join(msg_parts))
 
 
+def _duplicate_module_names(modules: Dict[str, AndroidModule]) -> Set[str]:
+    """Return module short names that appear more than once."""
+    name_counts: Dict[str, int] = defaultdict(int)
+    for module in modules.values():
+        name_counts[module.name] += 1
+    return {name for name, count in name_counts.items() if count > 1}
+
+
+def _module_report_key(module: AndroidModule, duplicate_names: Set[str]) -> str:
+    """Use short names by default, falling back to unique identifiers for duplicates."""
+    if module.name in duplicate_names:
+        return module.identifier
+    return module.name
+
+
 def auto_translate_resources(
     modules: Dict[str, AndroidModule],
     llm_config: LLMConfig,
@@ -1080,6 +1130,7 @@ def auto_translate_resources(
     """
     translation_log = {}
     total_translated = 0
+    duplicate_names = _duplicate_module_names(modules)
 
     for module in modules.values():
         if "default" not in module.language_resources:
@@ -1093,13 +1144,17 @@ def auto_translate_resources(
             module
         )
 
+        module_report_key = _module_report_key(module, duplicate_names)
         # Process each non-default language
         for lang, resources in module.language_resources.items():
             if lang == "default":
                 continue
 
+            module_log = translation_log.setdefault(
+                module_report_key, {"_module_name": module.name}
+            )
             # Initialize translation log for this language
-            translation_log.setdefault(module.name, {})[lang] = {
+            module_log[lang] = {
                 "strings": [],
                 "plurals": [],
             }
@@ -1142,7 +1197,7 @@ def auto_translate_resources(
                         include_reference_context,
                         reference_context_limit,
                     )
-                    translation_log[module.name][lang]["strings"].extend(string_results)
+                    module_log[lang]["strings"].extend(string_results)
                     total_translated += len(string_results)
 
                 # Translate missing plurals
@@ -1157,7 +1212,7 @@ def auto_translate_resources(
                         include_reference_context,
                         reference_context_limit,
                     )
-                    translation_log[module.name][lang]["plurals"].extend(plural_results)
+                    module_log[lang]["plurals"].extend(plural_results)
                     total_translated += sum(
                         len(p["translations"]) for p in plural_results
                     )
@@ -1271,6 +1326,7 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
     logger.info("Missing Translations Report")
     missing_count = 0
     missing_report = {}
+    duplicate_names = _duplicate_module_names(modules)
 
     for module in modules.values():
         module_has_missing = False
@@ -1285,6 +1341,7 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
             module
         )
 
+        module_report_key = _module_report_key(module, duplicate_names)
         # Check each non-default language
         for lang, resources in sorted(module.language_resources.items()):
             if lang == "default":
@@ -1316,9 +1373,9 @@ def check_missing_translations(modules: Dict[str, AndroidModule]) -> dict:
                 module_log_lines.append(f"  [{lang}]: missing {missing_description}")
 
                 # Add to the report dictionary
-                if module.name not in missing_report:
-                    missing_report[module.name] = {}
-                missing_report[module.name][lang] = {
+                if module_report_key not in missing_report:
+                    missing_report[module_report_key] = {"_module_name": module.name}
+                missing_report[module_report_key][lang] = {
                     "strings": list(missing_strings),
                     "plural_groups": sorted(missing_plural_groups),
                     "plurals": {},
@@ -1349,12 +1406,20 @@ def create_translation_report(translation_log):
     report = "# Translation Report\n\n"
     has_translations = False
 
-    for module, languages in translation_log.items():
+    for module_identifier, languages in translation_log.items():
         module_has_translations = False
-        module_report = f"## Module: {module}\n\n"
+        module_name = languages.get("_module_name", module_identifier)
+        if module_name == module_identifier:
+            module_heading = module_name
+        else:
+            module_heading = f"{module_name} ({module_identifier})"
+
+        module_report = f"## Module: {module_heading}\n\n"
         languages_report = ""
 
         for lang, details in languages.items():
+            if lang == "_module_name":
+                continue
             has_string_translations = bool(details.get("strings"))
             has_plural_translations = bool(details.get("plurals"))
 

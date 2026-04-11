@@ -211,5 +211,55 @@ class TestFileUpdating(TestIntegration):
         self.assertIn('<item quantity="other">%d new items</item>', updated_content)
 
 
+class TestDuplicateModuleNames(TestIntegration):
+    """Integration coverage for modules sharing the same short name."""
+
+    @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
+    def test_duplicate_module_names_stay_separate_in_translation_log(
+        self, mock_translate_batch
+    ):
+        """Translation state should not collide when module names repeat."""
+        mock_translate_batch.return_value = {"hello": "Hola"}
+
+        for base in ["featureA/common", "featureB/common"]:
+            res_dir = os.path.join(self.temp_dir.name, base, "src", "main", "res")
+            os.makedirs(os.path.join(res_dir, "values"), exist_ok=True)
+            os.makedirs(os.path.join(res_dir, "values-es"), exist_ok=True)
+            with open(os.path.join(res_dir, "values", "strings.xml"), "w") as f:
+                f.write(
+                    """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hello">Hello</string>
+</resources>"""
+                )
+            with open(os.path.join(res_dir, "values-es", "strings.xml"), "w") as f:
+                f.write(
+                    """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+</resources>"""
+                )
+
+        modules = find_resource_files(self.temp_dir.name)
+        llm_config = LLMConfig(
+            provider=LLMProvider.OPENAI, api_key="fake_api_key", model="fake_model"
+        )
+
+        with patch("AndroidResourceTranslator.update_xml_file"):
+            translation_log = auto_translate_resources(
+                modules,
+                llm_config=llm_config,
+                project_context="Test project",
+            )
+
+        self.assertEqual(len(translation_log), 2)
+        self.assertTrue(
+            all(entry.get("_module_name") == "common" for entry in translation_log.values())
+        )
+
+        report = create_translation_report(translation_log)
+        self.assertIn("featureA/common", report)
+        self.assertIn("featureB/common", report)
+
+
 if __name__ == "__main__":
     unittest.main()

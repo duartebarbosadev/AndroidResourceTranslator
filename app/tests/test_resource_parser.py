@@ -30,6 +30,30 @@ from AndroidResourceTranslator import (
 class TestResourceParser(unittest.TestCase):
     """Tests for Android resource file parsing functionality."""
 
+    VALID_RESOURCE_FOLDER_LANGUAGES = {
+        "values": "default",
+        "values-b+sr+Latn": "b+sr+Latn",
+        "values-ca": "ca",
+        "values-el": "el",
+        "values-es": "es",
+        "values-fi-rFI": "fi-rFI",
+        "values-hr": "hr",
+        "values-hu": "hu",
+        "values-it": "it",
+        "values-mr": "mr",
+        "values-nb-rNO": "nb-rNO",
+        "values-nl": "nl",
+        "values-pt": "pt",
+        "values-pt-rBR": "pt-rBR",
+        "values-ro": "ro",
+        "values-sr": "sr",
+        "values-sv-rSE": "sv-rSE",
+        "values-ta-rIN": "ta-rIN",
+        "values-vi": "vi",
+        "values-zh-rCN": "zh-rCN",
+        "values-zh-rTW": "zh-rTW",
+    }
+
     def setUp(self):
         """Set up a temporary directory for file-based tests."""
         self.temp_dir = tempfile.mkdtemp()
@@ -163,6 +187,37 @@ class TestFindResourceFiles(TestResourceParser):
             list(modules.values())[0].name, "module1", "Should only find module1"
         )
 
+    def test_ignore_folders_matches_exact_path_segments(self):
+        """Ignoring 'build' should not exclude paths like 'rebuild_module'."""
+        self.create_strings_xml(
+            os.path.join(
+                self.temp_dir,
+                "rebuild_module",
+                "src",
+                "main",
+                "res",
+                "values",
+                "strings.xml",
+            )
+        )
+        self.create_strings_xml(
+            os.path.join(
+                self.temp_dir,
+                "build",
+                "module2",
+                "src",
+                "main",
+                "res",
+                "values",
+                "strings.xml",
+            )
+        )
+
+        modules = find_resource_files(self.temp_dir, ignore_folders=["build"])
+
+        self.assertEqual(len(modules), 1, "Should find only the rebuild_module resource")
+        self.assertEqual(list(modules.values())[0].name, "rebuild_module")
+
     def test_gitignore_patterns(self):
         """Test that files matching gitignore patterns are skipped."""
         # Test gitignore pattern with explicit ignore_folders instead
@@ -233,59 +288,96 @@ class TestFindResourceFiles(TestResourceParser):
             "Should only find resources in values directory",
         )
 
+    def test_non_locale_values_qualifiers_are_ignored(self):
+        """Android config qualifiers like night/land should not be treated as locales."""
+        base_path = os.path.join(self.temp_dir, "module1", "src", "main", "res")
+        self.create_strings_xml(os.path.join(base_path, "values", "strings.xml"))
+        self.create_strings_xml(os.path.join(base_path, "values-es", "strings.xml"))
+        self.create_strings_xml(os.path.join(base_path, "values-night", "strings.xml"))
+        self.create_strings_xml(os.path.join(base_path, "values-land", "strings.xml"))
+        self.create_strings_xml(os.path.join(base_path, "values-v31", "strings.xml"))
+
+        modules = find_resource_files(self.temp_dir)
+
+        self.assertEqual(len(modules), 1, "Should find one module")
+        module = list(modules.values())[0]
+        self.assertIn("default", module.language_resources)
+        self.assertIn("es", module.language_resources)
+        self.assertNotIn("night", module.language_resources)
+        self.assertNotIn("land", module.language_resources)
+        self.assertNotIn("v31", module.language_resources)
+
+    def test_find_resource_files_accepts_supported_locale_values_folders(self):
+        """All supported locale values folders should be discovered as languages."""
+        base_path = os.path.join(self.temp_dir, "module1", "src", "main", "res")
+        for folder_name in self.VALID_RESOURCE_FOLDER_LANGUAGES:
+            self.create_strings_xml(os.path.join(base_path, folder_name, "strings.xml"))
+
+        self.create_strings_xml(
+            os.path.join(base_path, "mipmap-mdpi", "strings.xml")
+        )
+
+        modules = find_resource_files(self.temp_dir)
+
+        self.assertEqual(len(modules), 1, "Should find one module")
+        module = list(modules.values())[0]
+        self.assertEqual(
+            set(module.language_resources.keys()),
+            set(self.VALID_RESOURCE_FOLDER_LANGUAGES.values()),
+        )
+        self.assertNotIn("mipmap-mdpi", module.language_resources)
+
 
 class TestLanguageDetection(TestResourceParser):
     """Tests for language detection from resource paths."""
 
     def test_detect_language_from_path(self):
         """Test language detection from resource directory names."""
-        test_cases = [
-            (
+        for folder_name, expected_lang in self.VALID_RESOURCE_FOLDER_LANGUAGES.items():
+            path = (
                 Path(self.temp_dir)
                 / "module1"
                 / "src"
                 / "main"
                 / "res"
-                / "values"
-                / "strings.xml",
-                "default",
-            ),
-            (
-                Path(self.temp_dir)
-                / "module1"
-                / "src"
-                / "main"
-                / "res"
-                / "values-es"
-                / "strings.xml",
-                "es",
-            ),
-            (
-                Path(self.temp_dir)
-                / "module1"
-                / "src"
-                / "main"
-                / "res"
-                / "values-zh-rCN"
-                / "strings.xml",
-                "zh-rCN",
-            ),
-            (
-                Path(self.temp_dir)
-                / "module1"
-                / "src"
-                / "main"
-                / "res"
-                / "values-b+sr+Latn"
-                / "strings.xml",
-                "b+sr+Latn",
-            ),
-        ]
-        for path, expected_lang in test_cases:
+                / folder_name
+                / "strings.xml"
+            )
             detected_lang = detect_language_from_path(path)
             self.assertEqual(
                 detected_lang, expected_lang, f"Failed to detect language from {path}"
             )
+
+    def test_detect_language_from_path_rejects_non_locale_qualifiers(self):
+        """Non-locale values qualifiers should not be accepted as languages."""
+        invalid_paths = [
+            Path(self.temp_dir)
+            / "module1"
+            / "src"
+            / "main"
+            / "res"
+            / "values-night"
+            / "strings.xml",
+            Path(self.temp_dir)
+            / "module1"
+            / "src"
+            / "main"
+            / "res"
+            / "values-land"
+            / "strings.xml",
+            Path(self.temp_dir)
+            / "module1"
+            / "src"
+            / "main"
+            / "res"
+            / "values-v31"
+            / "strings.xml",
+        ]
+
+        for path in invalid_paths:
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(ValueError, "Invalid Android locale qualifier"):
+                    detect_language_from_path(path)
 
 
 class TestResourceParsing(TestResourceParser):

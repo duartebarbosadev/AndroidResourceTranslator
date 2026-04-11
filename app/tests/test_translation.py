@@ -25,7 +25,7 @@ from string_utils import (
     escape_double_quotes,
     escape_special_chars,
 )
-from llm_provider import LLMConfig, LLMProvider
+from llm_provider import LLMConfig, LLMProvider, translate_strings_batch_with_llm
 
 
 class TestSpecialCharacterEscaping(unittest.TestCase):
@@ -280,6 +280,151 @@ class TestAutoTranslation(unittest.TestCase):
         self.assertIn("es", result["test_module"])
         self.assertIn("strings", result["test_module"]["es"])
         self.assertIn("plurals", result["test_module"]["es"])
+
+    @patch("AndroidResourceTranslator.translate_plurals_batch_with_llm")
+    @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
+    @patch("AndroidResourceTranslator.update_xml_file")
+    def test_auto_translate_skips_plurals_when_target_has_extra_valid_forms(
+        self,
+        mock_update_xml,
+        mock_translate_strings_batch,
+        mock_translate_plurals_batch,
+    ):
+        """Extra locale-specific plural forms should not trigger retranslation."""
+        module = AndroidModule("test_module", "test_id")
+
+        default_resource = MagicMock()
+        default_resource.strings = {}
+        default_resource.plurals = {"days": {"other": "%d days"}}
+        default_resource.modified = False
+
+        sv_resource = MagicMock()
+        sv_resource.strings = {}
+        sv_resource.plurals = {
+            "days": {
+                "one": "%d dag",
+                "few": "%d dagar",
+                "other": "%d dagar",
+            }
+        }
+        sv_resource.modified = False
+
+        module.add_resource("default", default_resource)
+        module.add_resource("sv", sv_resource)
+
+        llm_config = LLMConfig(
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+        )
+
+        result = auto_translate_resources(
+            {"test_id": module},
+            llm_config=llm_config,
+            project_context="Test project",
+        )
+
+        mock_translate_strings_batch.assert_not_called()
+        mock_translate_plurals_batch.assert_not_called()
+        mock_update_xml.assert_not_called()
+        self.assertFalse(sv_resource.modified)
+        self.assertEqual(sv_resource.plurals["days"]["few"], "%d dagar")
+        self.assertEqual(result["test_module"]["sv"]["plurals"], [])
+
+    @patch("AndroidResourceTranslator.translate_plurals_batch_with_llm")
+    @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
+    @patch("AndroidResourceTranslator.update_xml_file")
+    def test_auto_translate_skips_existing_plural_when_target_only_has_other(
+        self,
+        mock_update_xml,
+        mock_translate_strings_batch,
+        mock_translate_plurals_batch,
+    ):
+        """A target plural that already exists should not be retransmitted."""
+        module = AndroidModule("test_module", "test_id")
+
+        default_resource = MagicMock()
+        default_resource.strings = {}
+        default_resource.plurals = {
+            "days": {"one": "%d day", "few": "%d days", "other": "%d days"}
+        }
+        default_resource.modified = False
+
+        target_resource = MagicMock()
+        target_resource.strings = {}
+        target_resource.plurals = {"days": {"other": "%d dias"}}
+        target_resource.modified = False
+
+        module.add_resource("default", default_resource)
+        module.add_resource("pt", target_resource)
+
+        llm_config = LLMConfig(
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+        )
+
+        result = auto_translate_resources(
+            {"test_id": module},
+            llm_config=llm_config,
+            project_context="Test project",
+        )
+
+        mock_translate_strings_batch.assert_not_called()
+        mock_translate_plurals_batch.assert_not_called()
+        mock_update_xml.assert_not_called()
+        self.assertFalse(target_resource.modified)
+        self.assertEqual(target_resource.plurals["days"], {"other": "%d dias"})
+        self.assertEqual(result["test_module"]["pt"]["plurals"], [])
+
+    @patch("AndroidResourceTranslator.translate_strings_batch_with_llm")
+    @patch("AndroidResourceTranslator.update_xml_file")
+    def test_auto_translate_raises_on_incomplete_batch_response(
+        self,
+        mock_update_xml,
+        mock_translate_strings_batch,
+    ):
+        """Partial string batches should fail instead of writing empty values."""
+        mock_translate_strings_batch.side_effect = ValueError(
+            "LLM returned an incomplete translations array. Missing keys: goodbye"
+        )
+
+        llm_config = LLMConfig(
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+        )
+
+        with self.assertRaisesRegex(ValueError, "Missing keys: goodbye"):
+            auto_translate_resources(
+                self.modules,
+                llm_config=llm_config,
+                project_context="Test project",
+            )
+
+        self.assertNotIn("goodbye", self.es_resource.strings)
+        mock_update_xml.assert_not_called()
+
+
+class TestBatchTranslationSafety(unittest.TestCase):
+    """Tests for safe handling of incomplete batch responses."""
+
+    def test_translate_strings_batch_raises_on_missing_keys(self):
+        """The adapter should reject partial LLM batch results."""
+
+        class FakeClient:
+            def __init__(self, config):
+                self.config = config
+
+            def chat_completion(self, **kwargs):
+                return {"translations": [{"key": "hello", "translation": "Hola"}]}
+
+        llm_config = LLMConfig(
+            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+        )
+
+        with patch("llm_provider.LLMClient", FakeClient):
+            with self.assertRaisesRegex(ValueError, "Missing keys: goodbye"):
+                translate_strings_batch_with_llm(
+                    strings_dict={"hello": "Hello", "goodbye": "Goodbye"},
+                    system_message="System",
+                    user_prompt="Prompt",
+                    llm_config=llm_config,
+                )
 
 
 if __name__ == "__main__":

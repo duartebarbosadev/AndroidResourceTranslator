@@ -199,6 +199,7 @@ class TestReporting(unittest.TestCase):
         self.assertIn("welcome", log_output)
         self.assertIn("cancel", log_output)
         self.assertIn("items", log_output)
+        self.assertIn("plural groups: items", log_output)
 
         # Verify missing report structure
         self.assertIn("test_module", missing_report)
@@ -207,7 +208,37 @@ class TestReporting(unittest.TestCase):
             sorted(missing_report["test_module"]["es"]["strings"]),
             ["cancel", "welcome"],
         )
-        self.assertIn("items", missing_report["test_module"]["es"]["plurals"])
+        self.assertEqual(missing_report["test_module"]["es"]["plural_groups"], ["items"])
+        self.assertEqual(missing_report["test_module"]["es"]["plurals"], {})
+
+    @patch("AndroidResourceTranslator.AndroidResourceFile.parse_file")
+    def test_check_missing_translations_does_not_require_source_plural_keys(
+        self, mock_parse_file
+    ):
+        """Plural completeness should not be inferred from source quantity keys."""
+        modules = {}
+        module = AndroidModule("test_module")
+
+        default_res = AndroidResourceFile(Path("dummy/path"), "default")
+        default_res.strings = {}
+        default_res.plurals = {
+            "days": {"one": "%d day", "few": "%d days", "other": "%d days"}
+        }
+
+        pt_res = AndroidResourceFile(Path("dummy/path"), "pt")
+        pt_res.strings = {}
+        pt_res.plurals = {"days": {"other": "%d dias"}}
+
+        module.language_resources["default"] = [default_res]
+        module.language_resources["pt"] = [pt_res]
+        modules["test_module"] = module
+
+        with self.assertLogs(level="INFO") as cm:
+            missing_report = check_missing_translations(modules)
+
+        log_output = "\n".join(cm.output)
+        self.assertIn("All translations are complete", log_output)
+        self.assertEqual(missing_report, {})
 
     @patch("AndroidResourceTranslator.AndroidResourceFile.parse_file")
     def test_check_missing_translations_keeps_duplicate_module_names_separate(

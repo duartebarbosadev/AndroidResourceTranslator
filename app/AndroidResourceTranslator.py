@@ -43,6 +43,7 @@ from llm_provider import (
 MAX_BATCH_SIZE = 10
 # Default number of existing translation pairs/plurals to include as context
 DEFAULT_REFERENCE_CONTEXT_LIMIT = 25
+LOCAL_LLM_PROVIDERS = {"lm_studio", "ollama"}
 
 TRANSLATION_GUIDELINES = """\
 Follow these guidelines carefully.
@@ -135,6 +136,38 @@ For plural resources, follow these guidelines:
 SYSTEM_MESSAGE_TEMPLATE = """\
 You are a professional translator translating textual UI elements within an Android from English into {target_language}. Follow user guidelines closely.
 """
+
+
+def _normalize_llm_provider(provider: Optional[str]) -> str:
+    """Normalize provider names from CLI or GitHub Action inputs."""
+    return (provider or "openrouter").strip().lower()
+
+
+def _resolve_api_key(
+    provider: str,
+    explicit_api_key: Optional[str] = None,
+    legacy_openai_api_key: Optional[str] = None,
+    legacy_openrouter_api_key: Optional[str] = None,
+) -> Optional[str]:
+    """Resolve API keys while preserving older OpenAI/OpenRouter inputs."""
+    provider_upper = provider.upper()
+
+    provider_specific_key = os.environ.get(f"{provider_upper}_API_KEY")
+    legacy_provider_arg = None
+    if provider == "openai":
+        legacy_provider_arg = legacy_openai_api_key
+    elif provider == "openrouter":
+        legacy_provider_arg = legacy_openrouter_api_key
+
+    return (
+        explicit_api_key
+        or os.environ.get("INPUT_API_KEY")
+        or os.environ.get("API_KEY")
+        or legacy_provider_arg
+        or provider_specific_key
+        or (os.environ.get("OPENAI_API_KEY") if provider == "openrouter" else None)
+    )
+
 
 # ------------------------------------------------------------------------------
 # Logger Setup
@@ -291,6 +324,8 @@ def configure_logging(trace: bool) -> None:
 
     # Suppress noisy debug logs from HTTP client/SDK libraries unless they escalate.
     noisy_loggers = [
+        "LiteLLM",
+        "litellm",
         "openai",
         "openai._base_client",
         "openai._http_client",
@@ -1197,10 +1232,7 @@ def _translate_missing_plurals(
     language_name = get_language_name(lang)
 
     # Build the base prompt (without specific plurals)
-    base_prompt = (
-        TRANSLATION_GUIDELINES
-        + PLURAL_GUIDELINES_ADDITION
-    )
+    base_prompt = TRANSLATION_GUIDELINES + PLURAL_GUIDELINES_ADDITION
 
     # Configure the system message
     system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=language_name)
@@ -1761,15 +1793,17 @@ def main() -> None:
         log_trace = os.environ.get("INPUT_LOG_TRACE", "false").lower() == "true"
 
         # LLM Provider configuration
-        llm_provider = os.environ.get("INPUT_LLM_PROVIDER", "openrouter").lower()
-        model = os.environ.get("INPUT_MODEL", "google/gemini-2.5-flash")
+        llm_provider = _normalize_llm_provider(
+            os.environ.get("INPUT_LLM_PROVIDER", "openrouter")
+        )
+        model = os.environ.get("INPUT_MODEL") or os.environ.get(
+            "INPUT_OPENAI_MODEL", "google/gemini-2.5-flash"
+        )
 
-        # API Keys - Resolve API key dynamically based on provider or standard variables
-        provider_upper = llm_provider.upper()
-        api_key = (
-            os.environ.get("INPUT_API_KEY") or
-            os.environ.get("API_KEY") or
-            os.environ.get(f"{provider_upper}_API_KEY")
+        # API Keys - Resolve API key dynamically while keeping legacy fallbacks.
+        api_key = _resolve_api_key(
+            provider=llm_provider,
+            explicit_api_key=os.environ.get("INPUT_API_KEY"),
         )
 
         # OpenRouter-specific settings
@@ -1865,6 +1899,24 @@ def main() -> None:
             default="google/gemini-2.5-flash",
             help="Model to use for translation (default: google/gemini-2.5-flash)",
         )
+        parser.add_argument(
+            "--openai-model",
+            dest="model_legacy",
+            default=None,
+            help="(Deprecated: use --model) OpenAI model to use",
+        )
+        parser.add_argument(
+            "--openai-api-key",
+            dest="openai_api_key",
+            default=None,
+            help="(Deprecated: use --api-key) OpenAI API key",
+        )
+        parser.add_argument(
+            "--openrouter-api-key",
+            dest="openrouter_api_key",
+            default=None,
+            help="(Deprecated: use --api-key) OpenRouter API key",
+        )
 
         # OpenRouter-specific arguments
         parser.add_argument(
@@ -1935,24 +1987,20 @@ def main() -> None:
         log_trace = args.log_trace
 
         # LLM Provider configuration
-        llm_provider = args.llm_provider
-        model = args.model
+        llm_provider = _normalize_llm_provider(args.llm_provider)
+        model = args.model_legacy or args.model
 
-        # API Keys - Determine dynamically with standard fallbacks
-        provider_upper = llm_provider.upper()
-        api_key = (
-            args.api_key or
-            os.environ.get("INPUT_API_KEY") or
-            os.environ.get("API_KEY") or
-            os.environ.get(f"{provider_upper}_API_KEY")
+        # API Keys - Determine dynamically with standard and legacy fallbacks.
+        api_key = _resolve_api_key(
+            provider=llm_provider,
+            explicit_api_key=args.api_key,
+            legacy_openai_api_key=args.openai_api_key,
+            legacy_openrouter_api_key=args.openrouter_api_key,
         )
 
         MAX_BATCH_SIZE = args.batch_size
         if MAX_BATCH_SIZE <= 0:
-            print(
-                f"Invalid batch size {MAX_BATCH_SIZE}; "
-                f"falling back to 10"
-            )
+            print(f"Invalid batch size {MAX_BATCH_SIZE}; falling back to 10")
             MAX_BATCH_SIZE = 10
 
         openrouter_site_url = args.openrouter_site_url
@@ -1999,28 +2047,6 @@ def main() -> None:
         print(runtime_details)
 
     configure_logging(log_trace)
-
-    # Early validation: Check API key if not in dry-run mode
-    # Local/offline providers (like lm_studio, ollama) do not require API keys
-    local_providers = ["lm_studio", "ollama"]
-    if not dry_run and not api_key and llm_provider not in local_providers:
-        provider_upper = llm_provider.upper()
-        env_var_name = f"{provider_upper}_API_KEY"
-        known_cloud_providers = ["openai", "openrouter", "gemini", "anthropic", "cohere", "groq", "mistral", "azure"]
-        if llm_provider in known_cloud_providers:
-            print("\n========================================")
-            print(f"ERROR: API key for provider '{llm_provider}' not found!")
-            print("========================================")
-            print(f"Translation is enabled (not in dry-run mode) but no key was provided for '{llm_provider}'.")
-            print(f"\nPlease set the environment variable: export {env_var_name}=your_key")
-            print("Or pass it via the command-line: --api-key your_key")
-            print("========================================\n")
-            sys.exit(1)
-        else:
-            logger.warning(
-                f"No API key provided for provider '{llm_provider}'. "
-                f"Proceeding assuming local execution or that the provider handles authentication internally."
-            )
 
     if not resources_paths:
         print("Error: 'resources_paths' input not provided.")

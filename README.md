@@ -166,7 +166,7 @@ The action supports the following inputs:
 
 ### Environment Variables (API Keys)
 
-Since the engine natively integrates **LiteLLM**, it automatically supports any LLM provider key by mapping them dynamically. 
+Since the engine natively integrates **LiteLLM**, it automatically supports any LLM provider key by mapping them dynamically.
 
 Set the appropriate key as a repository secret and pass it via `env:` in your workflow:
 

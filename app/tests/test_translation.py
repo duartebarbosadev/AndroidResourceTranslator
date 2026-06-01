@@ -31,7 +31,13 @@ from string_utils import (
     escape_double_quotes,
     escape_special_chars,
 )
-from llm_provider import LLMConfig, translate_strings_batch_with_llm
+from llm_provider import (
+    LLMConfig,
+    translate_plural_with_llm,
+    translate_plurals_batch_with_llm,
+    translate_with_llm,
+    translate_strings_batch_with_llm,
+)
 
 
 class TestSpecialCharacterEscaping(unittest.TestCase):
@@ -584,6 +590,66 @@ class TestAutoTranslation(unittest.TestCase):
 class TestBatchTranslationSafety(unittest.TestCase):
     """Tests for safe handling of incomplete batch responses."""
 
+    def test_translate_with_llm_includes_text_in_prompt(self):
+        """Single string helper should pass the source text to the model."""
+
+        from llm_provider import SingleTranslation
+
+        captured_messages = []
+
+        class FakeClient:
+            def __init__(self, config):
+                self.config = config
+
+            def chat_completion(self, **kwargs):
+                captured_messages.extend(kwargs["messages"])
+                return SingleTranslation(translation="Hola")
+
+        llm_config = LLMConfig(
+            provider="openai", api_key="test_api_key", model="test-model"
+        )
+
+        with patch("llm_provider.LLMClient", FakeClient):
+            result = translate_with_llm(
+                text="Hello",
+                system_message="System",
+                user_prompt="Prompt",
+                llm_config=llm_config,
+            )
+
+        self.assertEqual(result, "Hola")
+        self.assertIn("Hello", captured_messages[1]["content"])
+
+    def test_translate_plural_with_llm_includes_plural_json_in_prompt(self):
+        """Single plural helper should pass the plural payload to the model."""
+
+        from llm_provider import PluralTranslation
+
+        captured_messages = []
+
+        class FakeClient:
+            def __init__(self, config):
+                self.config = config
+
+            def chat_completion(self, **kwargs):
+                captured_messages.extend(kwargs["messages"])
+                return PluralTranslation(other="%d días")
+
+        llm_config = LLMConfig(
+            provider="openai", api_key="test_api_key", model="test-model"
+        )
+
+        with patch("llm_provider.LLMClient", FakeClient):
+            result = translate_plural_with_llm(
+                plural_json='{"other": "%d days"}',
+                system_message="System",
+                user_prompt="Prompt",
+                llm_config=llm_config,
+            )
+
+        self.assertEqual(result, {"other": "%d días"})
+        self.assertIn('"other": "%d days"', captured_messages[1]["content"])
+
     def test_translate_strings_batch_raises_on_missing_keys(self):
         """The adapter should reject partial LLM batch results."""
 
@@ -610,6 +676,69 @@ class TestBatchTranslationSafety(unittest.TestCase):
                     user_prompt="Prompt",
                     llm_config=llm_config,
                 )
+
+    def test_translate_plural_uses_single_quantity_as_other_fallback(self):
+        """Plural translation should recover when the model omits Android's fallback."""
+
+        from llm_provider import PluralTranslation
+
+        class FakeClient:
+            def __init__(self, config):
+                self.config = config
+
+            def chat_completion(self, **kwargs):
+                return PluralTranslation(one="1 día")
+
+        llm_config = LLMConfig(
+            provider="openai", api_key="test_api_key", model="test-model"
+        )
+
+        with patch("llm_provider.LLMClient", FakeClient):
+            result = translate_plural_with_llm(
+                plural_json='{"one": "1 day"}',
+                system_message="System",
+                user_prompt="Prompt",
+                llm_config=llm_config,
+            )
+
+        self.assertEqual(result, {"one": "1 día", "other": "1 día"})
+
+    def test_translate_plurals_batch_uses_single_quantity_as_other_fallback(self):
+        """Batch plural translation should recover per plural item."""
+
+        from llm_provider import (
+            PluralBatchItem,
+            PluralTranslation,
+            PluralsBatchTranslation,
+        )
+
+        class FakeClient:
+            def __init__(self, config):
+                self.config = config
+
+            def chat_completion(self, **kwargs):
+                return PluralsBatchTranslation(
+                    translations=[
+                        PluralBatchItem(
+                            plural_name="days_left",
+                            quantities=PluralTranslation(one="1 día"),
+                        )
+                    ]
+                )
+
+        llm_config = LLMConfig(
+            provider="openai", api_key="test_api_key", model="test-model"
+        )
+
+        with patch("llm_provider.LLMClient", FakeClient):
+            result = translate_plurals_batch_with_llm(
+                plurals_dict={"days_left": {"one": "1 day"}},
+                system_message="System",
+                user_prompt="Prompt",
+                llm_config=llm_config,
+            )
+
+        self.assertEqual(result, {"days_left": {"one": "1 día", "other": "1 día"}})
 
 
 if __name__ == "__main__":

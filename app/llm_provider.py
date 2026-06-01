@@ -17,6 +17,8 @@ import litellm
 logger = logging.getLogger(__name__)
 
 # Suppress noisy logging from litellm/openai unless error/warning
+litellm.set_verbose = False
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 logging.getLogger("litellm").setLevel(logging.WARNING)
 
 
@@ -40,8 +42,8 @@ class PluralTranslation(BaseModel):
     one: Optional[str] = Field(
         None, description="Translation for singular quantity (e.g., '1 day')"
     )
-    other: str = Field(
-        ...,
+    other: Optional[str] = Field(
+        None,
         description="Translation for other quantities (e.g., '%d days') - this is the default fallback",
     )
     zero: Optional[str] = Field(
@@ -157,10 +159,7 @@ class LLMClient:
 
         # Add provider-specific headers (OpenRouter ranking / site info)
         provider_lower = self.config.provider.lower() if self.config.provider else ""
-        if (
-            provider_lower == "openrouter"
-            and self.config.send_site_info
-        ):
+        if provider_lower == "openrouter" and self.config.send_site_info:
             extra_headers = {}
             if self.config.site_url:
                 extra_headers["HTTP-Referer"] = self.config.site_url
@@ -219,10 +218,11 @@ def translate_with_llm(
         return ""
 
     client = LLMClient(llm_config)
+    full_user_prompt = f"{user_prompt}\n\nText to translate:\n{text}"
 
     messages = [
         {"role": "system", "content": system_message},
-        {"role": "user", "content": user_prompt},
+        {"role": "user", "content": full_user_prompt},
     ]
 
     result = client.chat_completion(
@@ -241,10 +241,11 @@ def translate_plural_with_llm(
     Translate plural resources using the configured LLM provider with function calling via Instructor.
     """
     client = LLMClient(llm_config)
+    full_user_prompt = f"{user_prompt}\n\nPlural JSON to translate:\n{plural_json}"
 
     messages = [
         {"role": "system", "content": system_message},
-        {"role": "user", "content": user_prompt},
+        {"role": "user", "content": full_user_prompt},
     ]
 
     result = client.chat_completion(

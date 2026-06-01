@@ -146,26 +146,13 @@ def _normalize_llm_provider(provider: Optional[str]) -> str:
 def _resolve_api_key(
     provider: str,
     explicit_api_key: Optional[str] = None,
-    legacy_openai_api_key: Optional[str] = None,
-    legacy_openrouter_api_key: Optional[str] = None,
 ) -> Optional[str]:
-    """Resolve API keys while preserving older OpenAI/OpenRouter inputs."""
+    """Resolve API keys from explicit, generic, or provider-specific sources."""
     provider_upper = provider.upper()
-
-    provider_specific_key = os.environ.get(f"{provider_upper}_API_KEY")
-    legacy_provider_arg = None
-    if provider == "openai":
-        legacy_provider_arg = legacy_openai_api_key
-    elif provider == "openrouter":
-        legacy_provider_arg = legacy_openrouter_api_key
-
     return (
         explicit_api_key
-        or os.environ.get("INPUT_API_KEY")
         or os.environ.get("API_KEY")
-        or legacy_provider_arg
-        or provider_specific_key
-        or (os.environ.get("OPENAI_API_KEY") if provider == "openrouter" else None)
+        or os.environ.get(f"{provider_upper}_API_KEY")
     )
 
 
@@ -1796,15 +1783,10 @@ def main() -> None:
         llm_provider = _normalize_llm_provider(
             os.environ.get("INPUT_LLM_PROVIDER", "openrouter")
         )
-        model = os.environ.get("INPUT_MODEL") or os.environ.get(
-            "INPUT_OPENAI_MODEL", "google/gemini-2.5-flash"
-        )
+        model = os.environ.get("INPUT_MODEL", "google/gemini-2.5-flash")
 
-        # API Keys - Resolve API key dynamically while keeping legacy fallbacks.
-        api_key = _resolve_api_key(
-            provider=llm_provider,
-            explicit_api_key=os.environ.get("INPUT_API_KEY"),
-        )
+        # API Keys
+        api_key = _resolve_api_key(provider=llm_provider)
 
         # OpenRouter-specific settings
         openrouter_site_url = os.environ.get(
@@ -1899,24 +1881,6 @@ def main() -> None:
             default="google/gemini-2.5-flash",
             help="Model to use for translation (default: google/gemini-2.5-flash)",
         )
-        parser.add_argument(
-            "--openai-model",
-            dest="model_legacy",
-            default=None,
-            help="(Deprecated: use --model) OpenAI model to use",
-        )
-        parser.add_argument(
-            "--openai-api-key",
-            dest="openai_api_key",
-            default=None,
-            help="(Deprecated: use --api-key) OpenAI API key",
-        )
-        parser.add_argument(
-            "--openrouter-api-key",
-            dest="openrouter_api_key",
-            default=None,
-            help="(Deprecated: use --api-key) OpenRouter API key",
-        )
 
         # OpenRouter-specific arguments
         parser.add_argument(
@@ -1988,14 +1952,12 @@ def main() -> None:
 
         # LLM Provider configuration
         llm_provider = _normalize_llm_provider(args.llm_provider)
-        model = args.model_legacy or args.model
+        model = args.model
 
-        # API Keys - Determine dynamically with standard and legacy fallbacks.
+        # API Keys
         api_key = _resolve_api_key(
             provider=llm_provider,
             explicit_api_key=args.api_key,
-            legacy_openai_api_key=args.openai_api_key,
-            legacy_openrouter_api_key=args.openrouter_api_key,
         )
 
         MAX_BATCH_SIZE = args.batch_size

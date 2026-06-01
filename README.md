@@ -1,6 +1,6 @@
 # Android Resource Translator
 
-**Android Resource Translator** scans `strings.xml` files for missing translations and automatically translates them using AI language models (OpenAI or OpenRouter).
+**Android Resource Translator** scans `strings.xml` files for missing translations and automatically translates them using modern LLM providers.
 
 [![GitHub Action](https://img.shields.io/badge/GitHub%20Action-enabled-brightgreen)](https://github.com/marketplace/actions/android-resource-translator)
 

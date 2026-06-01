@@ -587,12 +587,16 @@ class TestBatchTranslationSafety(unittest.TestCase):
     def test_translate_strings_batch_raises_on_missing_keys(self):
         """The adapter should reject partial LLM batch results."""
 
+        from llm_provider import StringBatchTranslation, StringBatchItem
+
         class FakeClient:
             def __init__(self, config):
                 self.config = config
 
             def chat_completion(self, **kwargs):
-                return {"translations": [{"key": "hello", "translation": "Hola"}]}
+                return StringBatchTranslation(
+                    translations=[StringBatchItem(key="hello", translation="Hola")]
+                )
 
         llm_config = LLMConfig(
             provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"

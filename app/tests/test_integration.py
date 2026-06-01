@@ -253,7 +253,10 @@ class TestDuplicateModuleNames(TestIntegration):
 
         self.assertEqual(len(translation_log), 2)
         self.assertTrue(
-            all(entry.get("_module_name") == "common" for entry in translation_log.values())
+            all(
+                entry.get("_module_name") == "common"
+                for entry in translation_log.values()
+            )
         )
 
         report = create_translation_report(translation_log)

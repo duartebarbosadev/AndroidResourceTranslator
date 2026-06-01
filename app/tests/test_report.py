@@ -208,7 +208,9 @@ class TestReporting(unittest.TestCase):
             sorted(missing_report["test_module"]["es"]["strings"]),
             ["cancel", "welcome"],
         )
-        self.assertEqual(missing_report["test_module"]["es"]["plural_groups"], ["items"])
+        self.assertEqual(
+            missing_report["test_module"]["es"]["plural_groups"], ["items"]
+        )
         self.assertEqual(missing_report["test_module"]["es"]["plurals"], {})
 
     @patch("AndroidResourceTranslator.AndroidResourceFile.parse_file")
@@ -273,8 +275,12 @@ class TestReporting(unittest.TestCase):
 
         self.assertIn("/repo/featureA/common", missing_report)
         self.assertIn("/repo/featureB/common", missing_report)
-        self.assertEqual(missing_report["/repo/featureA/common"]["_module_name"], "common")
-        self.assertEqual(missing_report["/repo/featureB/common"]["_module_name"], "common")
+        self.assertEqual(
+            missing_report["/repo/featureA/common"]["_module_name"], "common"
+        )
+        self.assertEqual(
+            missing_report["/repo/featureB/common"]["_module_name"], "common"
+        )
         self.assertEqual(
             missing_report["/repo/featureA/common"]["es"]["strings"], ["hello"]
         )

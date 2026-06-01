@@ -109,6 +109,31 @@ Please note that each time the action runs, it will process **all** missing tran
 
 We recommend the model google/gemini-2.5-flash as it got the best results in our testing and is not as expensive as other models.
 
+## Supported LLM Providers & Models (via LiteLLM)
+
+Thanks to the integration of [LiteLLM](https://github.com/BerriAI/litellm), this tool natively supports **100+ LLM providers**. You can check the [LiteLLM repository](https://github.com/BerriAI/litellm) and their [providers documentation](https://docs.litellm.ai/docs/providers) to see the full list of supported models and setup guides.
+
+### 1. Direct API Providers
+Specify the `llm_provider` and `model` in your inputs, and supply the corresponding API key as a repository secret:
+
+* **Anthropic Claude**:
+  * `llm_provider: anthropic`
+  * `model: claude-3-5-sonnet-latest`
+  * Environment variable: `ANTHROPIC_API_KEY`
+* **Google Gemini (Direct API)**:
+  * `llm_provider: gemini`
+  * `model: gemini/gemini-2.5-flash` (or `gemini/gemini-2.5-pro`)
+  * Environment variable: `GEMINI_API_KEY`
+* **Azure OpenAI**:
+  * `llm_provider: azure`
+  * Environment variables: standard Azure keys (`AZURE_API_KEY`, `AZURE_API_BASE`, etc.)
+
+### 2. Local / Offline Translation (Free & Private)
+You can run models locally using **Ollama**:
+* **Ollama**:
+  * `llm_provider: ollama`
+  * `model: ollama/llama3`
+
 ## Local Execution
 
 To run the translator on your local machine, execute:
@@ -128,8 +153,8 @@ The action supports the following inputs:
 | **resources_paths**          | Paths to the Android resource directories. Typically includes directories such as `app/src/main/res`, `library/src/main/res`, etc. If not provided, this action will search throughout the entire project folder.                         | `${{ github.workspace }}`                                              | Yes      | `./app/src/main/res, ./library/src/main/res, ./feature/src/main/res`   |
 | **dry_run**                  | Run in dry-run mode (only report missing translations without translating). Set to `"true"` to enable dry-run mode.                                                                                                                           | `"false"`                                                              | Yes      | `"true"` or `"false"`                                                  |
 | **log_trace**                | Enable detailed logging. Use `"true"` for verbose output.                                                                                                                                                                                     | `"false"`                                                              | Yes      | `"true"`                                                               |
-| **llm_provider**             | LLM provider to use for translation. Options are `"openai"` or `"openrouter"`.                                                                                                                                                                 | `"openrouter"`                                                             | Yes      | `"openai"`, `"openrouter"`                                              |
-| **model**                    | Model to use for translation. For OpenAI: `gpt-4o-mini`, `gpt-4o`, etc. For OpenRouter: `anthropic/claude-sonnet-4.5` (recommended), `anthropic/claude-sonnet-4.5`, etc.                                                                                     | `"google/gemini-2.5-flash"`                                                        | Yes      | `"google/gemini-2.5-flash"`, `"anthropic/claude-sonnet-4.5"`         |
+| **llm_provider**             | LLM provider to use for translation. Options include `"openai"`, `"openrouter"`, `"anthropic"`, `"gemini"`, `"azure"`, `"ollama"`, etc. (via LiteLLM).                                                                                                                                                                 | `"openrouter"`                                                             | Yes      | `"openai"`, `"openrouter"`, `"anthropic"`, `"gemini"`, `"ollama"`          |
+| **model**                    | Model to use for translation. Supports all models from the chosen provider (e.g. `gpt-4o-mini`, `google/gemini-2.5-flash`, `claude-3-5-sonnet-latest`, `ollama/llama3`).                                                                                     | `"google/gemini-2.5-flash"`                                                        | Yes      | `"google/gemini-2.5-flash"`, `"gpt-4o-mini"`, `"claude-3-5-sonnet-latest"`|
 | **openrouter_site_url**      | Your site URL for OpenRouter rankings. Used to identify your application in OpenRouter analytics.                                                                                                                                             | `"https://github.com/duartebarbosadev/AndroidResourceTranslator"`     | Yes      | ``                         |
 | **openrouter_site_name**     | Your site name for OpenRouter rankings. Used to identify your application in OpenRouter analytics.                                                                                                                                            | `"AndroidResourceTranslatorAction"`                                    | Yes      | `""`                                                        |
 | **openrouter_send_site_info** | Send site URL and name to OpenRouter for rankings. Set to `"false"` to disable.                                                                                                                                                               | `"true"`                                                               | Yes      | `"true"` or `"false"`                                                  |
@@ -146,6 +171,8 @@ Set these as repository secrets and pass them via `env:` in your workflow:
 | ----------------------- | ------------------------------------------------ | ------------------------------- |
 | **OPENAI_API_KEY**      | OpenAI API key                                   | OpenAI provider                 |
 | **OPENROUTER_API_KEY**  | OpenRouter API key                               | OpenRouter provider             |
+| **ANTHROPIC_API_KEY**  | Anthropic Claude API key                         | Anthropic Claude provider       |
+| **GEMINI_API_KEY**      | Google Gemini API key                            | Google Gemini provider          |
 
 ## Translation Report Output
 

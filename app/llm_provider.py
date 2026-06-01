@@ -3,168 +3,103 @@
 LLM Provider Module
 
 This module provides an abstraction layer for communicating with different
-LLM providers (OpenAI, OpenRouter) using a unified interface. It handles
-provider-specific configurations, API endpoints, and authentication.
+LLM providers (OpenAI, OpenRouter, Anthropic, Google, etc.) using a unified interface
+powered by LiteLLM and Instructor. It handles structured outputs with Pydantic
+and provider-specific configurations.
 """
 
 import logging
 from enum import Enum
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
+from pydantic import BaseModel, Field
+import litellm
+import instructor
 
 logger = logging.getLogger(__name__)
 
+# Suppress noisy logging from litellm/openai unless error/warning
+logging.getLogger("litellm").setLevel(logging.WARNING)
+
 
 # ------------------------------------------------------------------------------
-# Tool/Function Calling Schemas for Structured Outputs
+# Pydantic Schemas for Structured Outputs (Instructor)
 # ------------------------------------------------------------------------------
 
-# Tool schema for translating single strings
-# Uses strict: True for guaranteed schema compliance (OpenAI Structured Outputs)
-TRANSLATE_STRING_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "translate_string",
-        "description": "Translate a single Android UI string to the target language following all translation guidelines",
-        "strict": True,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "translation": {
-                    "type": "string",
-                    "description": "The translated text in the target language with proper character escaping",
-                }
-            },
-            "required": ["translation"],
-            "additionalProperties": False,
-        },
-    },
-}
 
-# Tool schema for translating plural resources
-# Returns a dictionary mapping quantity keys to translated strings
-# Note: We explicitly define all 6 Android plural keys as optional properties
-# to help the model understand what to return without requiring strict mode
-TRANSLATE_PLURAL_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "translate_plural",
-        "description": "Translate Android plural resources with all appropriate quantity forms for the target language",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "one": {
-                    "type": "string",
-                    "description": "Translation for singular quantity (e.g., '1 day')",
-                },
-                "other": {
-                    "type": "string",
-                    "description": "Translation for other quantities (e.g., '%d days') - this is the default fallback",
-                },
-                "zero": {
-                    "type": "string",
-                    "description": "Translation for zero quantity if the target language requires it",
-                },
-                "two": {
-                    "type": "string",
-                    "description": "Translation for dual quantity if the target language requires it",
-                },
-                "few": {
-                    "type": "string",
-                    "description": "Translation for few quantity if the target language requires it (e.g., Slavic languages)",
-                },
-                "many": {
-                    "type": "string",
-                    "description": "Translation for many quantity if the target language requires it (e.g., Slavic languages)",
-                },
-            },
-            "required": [],
-            "additionalProperties": False,
-        },
-    },
-}
+class SingleTranslation(BaseModel):
+    """Schema for translating single strings."""
 
-# Tool schema for batch translating multiple strings at once
-# Uses an array of {key, translation} objects instead of a dynamic dictionary
-# This avoids issues with additionalProperties in some LLM providers
-TRANSLATE_STRINGS_BATCH_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "translate_strings_batch",
-        "description": "Translate all provided Android UI strings to the target language. Return an array containing ALL strings with their translations.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "translations": {
-                    "type": "array",
-                    "description": "Array of translation objects, one for each input string",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "key": {
-                                "type": "string",
-                                "description": "The string resource key from the input",
-                            },
-                            "translation": {
-                                "type": "string",
-                                "description": "The translated text for this key",
-                            },
-                        },
-                        "required": ["key", "translation"],
-                        "additionalProperties": False,
-                    },
-                }
-            },
-            "required": ["translations"],
-            "additionalProperties": False,
-        },
-    },
-}
+    translation: str = Field(
+        ...,
+        description="The translated text in the target language with proper character escaping",
+    )
 
-# Tool schema for batch translating multiple plural resources at once
-# Uses an array structure to avoid issues with dynamic object keys
-TRANSLATE_PLURALS_BATCH_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "translate_plurals_batch",
-        "description": "Translate multiple Android plural resources with all appropriate quantity forms for the target language. Return an array containing ALL plurals with their quantity translations.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "translations": {
-                    "type": "array",
-                    "description": "Array of plural translation objects, one for each input plural resource",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "plural_name": {
-                                "type": "string",
-                                "description": "The plural resource name from the input",
-                            },
-                            "quantities": {
-                                "type": "object",
-                                "description": "Translations for each quantity form",
-                                "properties": {
-                                    "one": {"type": "string"},
-                                    "other": {"type": "string"},
-                                    "zero": {"type": "string"},
-                                    "two": {"type": "string"},
-                                    "few": {"type": "string"},
-                                    "many": {"type": "string"},
-                                },
-                                "additionalProperties": False,
-                            },
-                        },
-                        "required": ["plural_name", "quantities"],
-                        "additionalProperties": False,
-                    },
-                }
-            },
-            "required": ["translations"],
-            "additionalProperties": False,
-        },
-    },
-}
+
+class PluralTranslation(BaseModel):
+    """Schema for translating plural resources with individual quantity forms."""
+
+    one: Optional[str] = Field(
+        None, description="Translation for singular quantity (e.g., '1 day')"
+    )
+    other: str = Field(
+        ...,
+        description="Translation for other quantities (e.g., '%d days') - this is the default fallback",
+    )
+    zero: Optional[str] = Field(
+        None,
+        description="Translation for zero quantity if the target language requires it",
+    )
+    two: Optional[str] = Field(
+        None,
+        description="Translation for dual quantity if the target language requires it",
+    )
+    few: Optional[str] = Field(
+        None,
+        description="Translation for few quantity if the target language requires it",
+    )
+    many: Optional[str] = Field(
+        None,
+        description="Translation for many quantity if the target language requires it",
+    )
+
+
+class StringBatchItem(BaseModel):
+    """Single item in a batch string translation."""
+
+    key: str = Field(..., description="The string resource key from the input")
+    translation: str = Field(..., description="The translated text for this key")
+
+
+class StringBatchTranslation(BaseModel):
+    """Schema for batch translating multiple strings at once."""
+
+    translations: List[StringBatchItem] = Field(
+        ..., description="Array of translation objects, one for each input string"
+    )
+
+
+class PluralBatchItem(BaseModel):
+    """Single item in a batch plural translation."""
+
+    plural_name: str = Field(..., description="The plural resource name from the input")
+    quantities: PluralTranslation = Field(
+        ..., description="Translations for each quantity form"
+    )
+
+
+class PluralsBatchTranslation(BaseModel):
+    """Schema for batch translating multiple plural resources at once."""
+
+    translations: List[PluralBatchItem] = Field(
+        ...,
+        description="Array of plural translation objects, one for each input plural resource",
+    )
+
+
+# ------------------------------------------------------------------------------
+# Core Interfaces and Clients
+# ------------------------------------------------------------------------------
 
 
 class LLMProvider(Enum):
@@ -178,14 +113,6 @@ class LLMProvider(Enum):
 class LLMConfig:
     """
     Configuration for LLM API access.
-
-    Attributes:
-        provider: The LLM provider to use (OpenAI or OpenRouter)
-        api_key: API key for authentication
-        model: Model identifier (e.g., "gpt-4o-mini" or "google/gemini-2.5-flash")
-        site_url: Optional site URL for OpenRouter rankings
-        site_name: Optional site name for OpenRouter rankings
-        send_site_info: Whether to send site URL/name to OpenRouter (default: True)
     """
 
     provider: LLMProvider
@@ -209,360 +136,147 @@ class LLMConfig:
 
 class LLMClient:
     """
-    Client for interacting with LLM APIs.
-
-    Supports both OpenAI and OpenRouter with a unified interface.
-    Uses the OpenAI Python SDK as both providers are API-compatible.
+    Client for interacting with LLM APIs using LiteLLM and Instructor.
     """
 
-    # Provider-specific base URLs
-    BASE_URLS = {
-        LLMProvider.OPENAI: "https://api.openai.com/v1",
-        LLMProvider.OPENROUTER: "https://openrouter.ai/api/v1",
-    }
-
     def __init__(self, config: LLMConfig):
-        """
-        Initialize the LLM client with provider configuration.
-
-        Args:
-            config: LLMConfig object with provider settings
-
-        Raises:
-            ImportError: If the OpenAI package is not installed
-        """
         self.config = config
-        self.client = self._create_client()
+        # Patch LiteLLM with Instructor for robust structured outputs
+        self.client = instructor.from_litellm(completion=litellm.completion)
 
         logger.info(
             f"Initialized LLM client with provider={config.provider.value}, "
             f"model={config.model}"
         )
 
-    def _create_client(self):
-        """
-        Create and configure the OpenAI client for the selected provider.
-
-        Returns:
-            Configured OpenAI client instance
-
-        Raises:
-            ImportError: If the OpenAI package is not installed
-        """
-        try:
-            from openai import OpenAI
-        except ImportError:
-            logger.error(
-                "OpenAI package not installed. Please install it using 'pip install openai'."
-            )
-            raise ImportError(
-                "OpenAI package not installed. Run 'pip install openai' first."
-            )
-
-        base_url = self.BASE_URLS[self.config.provider]
-
-        logger.debug(f"Creating OpenAI client with base_url={base_url}")
-
-        return OpenAI(api_key=self.config.api_key, base_url=base_url)
-
-    def _get_extra_headers(self) -> Dict[str, str]:
-        """
-        Get provider-specific extra headers.
-
-        For OpenRouter, includes HTTP-Referer and X-Title for rankings
-        (only if send_site_info is True).
-
-        Returns:
-            Dictionary of extra headers to include in requests
-        """
-        if (
-            self.config.provider == LLMProvider.OPENROUTER
-            and self.config.send_site_info
-        ):
-            headers = {}
-
-            if self.config.site_url:
-                headers["HTTP-Referer"] = self.config.site_url
-                logger.debug(f"Adding HTTP-Referer header: {self.config.site_url}")
-
-            if self.config.site_name:
-                headers["X-Title"] = self.config.site_name
-                logger.debug(f"Adding X-Title header: {self.config.site_name}")
-
-            return headers
-
-        return {}
-
     def chat_completion(
         self,
         messages: list,
-        tools: Optional[list] = None,
-        tool_choice: str = "required",
+        response_model: Optional[type] = None,
         temperature: float = 0,
         **kwargs,
     ) -> Any:
         """
-        Send a chat completion request to the LLM API with optional function calling.
-
-        Args:
-            messages: List of message dicts with 'role' and 'content'
-            tools: Optional list of tool definitions for function calling
-            tool_choice: Controls which tool is called: "auto", "required", or "none" (default: "required")
-            temperature: Sampling temperature (0 = deterministic, 1 = creative)
-            **kwargs: Additional arguments to pass to the API
-
-        Returns:
-            If tools are provided: Dict containing the function arguments
-            If no tools: String containing the generated text response
-
-        Raises:
-            Exception: For any API-related errors (authentication, rate limits, etc.)
+        Send a chat completion request to the LLM API using LiteLLM and Instructor.
         """
-        try:
-            extra_headers = self._get_extra_headers()
+        # Format model string for LiteLLM
+        model_str = self.config.model
+        if self.config.provider == LLMProvider.OPENROUTER and not model_str.startswith(
+            "openrouter/"
+        ):
+            model_str = f"openrouter/{model_str}"
+        elif self.config.provider == LLMProvider.OPENAI and not any(
+            model_str.startswith(p) for p in ["openai/", "gpt-"]
+        ):
+            model_str = f"openai/{model_str}"
 
-            logger.debug(
-                f"Sending chat completion request to {self.config.provider.value} "
-                f"(model: {self.config.model}, temperature: {temperature}, "
-                f"tools: {'yes' if tools else 'no'})"
-            )
+        # Build payload parameters
+        api_params = {
+            "model": model_str,
+            "messages": messages,
+            "temperature": temperature,
+            "api_key": self.config.api_key,
+            **kwargs,
+        }
 
-            # Prepare API call parameters
-            api_params = {
-                "model": self.config.model,
-                "messages": messages,
-                "temperature": temperature,
-                **kwargs,
-            }
-
-            if logger.isEnabledFor(logging.DEBUG):
-                try:
-                    sanitized_messages = []
-                    for message in messages:
-                        if isinstance(message, dict):
-                            sanitized_messages.append(
-                                {
-                                    "role": message.get("role"),
-                                    "content": message.get("content"),
-                                }
-                            )
-                        else:
-                            sanitized_messages.append(str(message))
-                    logger.debug(
-                        "Chat completion prompt payload: %s", sanitized_messages
-                    )
-                except Exception as prompt_log_error:  # pragma: no cover - defensive
-                    logger.debug(
-                        "Unable to log chat completion prompt: %s", prompt_log_error
-                    )
-
-                if tools:
-                    tool_names = []
-                    for tool in tools:
-                        function_meta = None
-                        if isinstance(tool, dict):
-                            function_meta = tool.get("function")
-
-                        if isinstance(function_meta, dict):
-                            tool_names.append(function_meta.get("name", "unknown"))
-                        else:
-                            tool_names.append(str(tool))
-                    logger.debug("Chat completion tools: %s", tool_names)
-
-            # Add tools/function calling support
-            if tools:
-                api_params["tools"] = tools
-                api_params["tool_choice"] = tool_choice
-                # Structured outputs require parallel_tool_calls: false
-                api_params["parallel_tool_calls"] = False
-
-            # Add extra headers for OpenRouter
+        # Add provider-specific headers (OpenRouter ranking / site info)
+        if (
+            self.config.provider == LLMProvider.OPENROUTER
+            and self.config.send_site_info
+        ):
+            extra_headers = {}
+            if self.config.site_url:
+                extra_headers["HTTP-Referer"] = self.config.site_url
+            if self.config.site_name:
+                extra_headers["X-Title"] = self.config.site_name
             if extra_headers:
                 api_params["extra_headers"] = extra_headers
 
-            # Make the API call
-            response = self.client.chat.completions.create(**api_params)
+        logger.debug(
+            f"Sending chat completion request via LiteLLM (model: {model_str}, "
+            f"response_model: {response_model.__name__ if response_model else 'None'})"
+        )
 
-            if logger.isEnabledFor(logging.DEBUG):
-                try:
-                    response_payload = response.model_dump()
-                except AttributeError:
-                    try:  # pragma: no cover - fallback for alternative client versions
-                        response_payload = response.dict()
-                    except AttributeError:
-                        response_payload = str(response)
-                logger.debug(
-                    "Chat completion raw response payload: %s", response_payload
+        try:
+            if response_model:
+                return self.client.chat.completions.create(
+                    response_model=response_model,
+                    **api_params,
                 )
-
-            # Parse response based on whether tools were used
-            if tools:
-                # Extract function call arguments
-                message = response.choices[0].message
-
-                if not message.tool_calls:
-                    raise ValueError(
-                        "Model did not return any tool calls despite tool_choice='required'"
-                    )
-
-                tool_call = message.tool_calls[0]
-                function_name = tool_call.function.name
-                arguments_str = tool_call.function.arguments
-
-                logger.debug(f"Raw function arguments string: {arguments_str}")
-
-                # Parse the JSON arguments
-                import json
-
-                arguments = json.loads(arguments_str)
-
-                logger.debug(
-                    f"Function called: {function_name} with {len(arguments)} parameters"
-                )
-                logger.debug("LLM function output payload: %s", arguments)
-
-                # Additional debugging for batch translations
-                if "translations" in arguments:
-                    translations_dict = arguments["translations"]
-                    logger.debug(f"Translations dict type: {type(translations_dict)}")
-                    logger.debug(f"Translations dict length: {len(translations_dict)}")
-                    if (
-                        isinstance(translations_dict, dict)
-                        and len(translations_dict) > 0
-                    ):
-                        first_key = list(translations_dict.keys())[0]
-                        value = translations_dict[first_key]
-                        formatted_value = value[:50] if len(str(value)) > 50 else value
-                        logger.debug(
-                            f"First translation key: {first_key}, value: {formatted_value}"
-                        )
-
-                return arguments
-
             else:
-                # Extract text content (backward compatibility)
-                generated_text = response.choices[0].message.content.strip()
-
-                logger.debug(
-                    f"Received response from {self.config.provider.value}: {generated_text[:100]}..."
-                )
-
-                return generated_text
+                response = litellm.completion(**api_params)
+                return response.choices[0].message.content.strip()
 
         except Exception as e:
-            logger.error(f"Error calling {self.config.provider.value} API: {e}")
+            logger.error(f"Error during LLM API call: {e}")
             raise
+
+
+# ------------------------------------------------------------------------------
+# Translation Orchestration Helpers
+# ------------------------------------------------------------------------------
 
 
 def translate_with_llm(
     text: str, system_message: str, user_prompt: str, llm_config: LLMConfig
 ) -> str:
     """
-    Translate text using the configured LLM provider with function calling.
-
-    This is the main entry point for single string translations.
-    Uses temperature=0 for deterministic, consistent translations.
-    Leverages function calling with structured outputs for 100% reliable schema compliance.
-
-    Args:
-        text: The text to translate
-        system_message: System prompt defining the translator's role
-        user_prompt: User prompt with translation guidelines and target language
-        llm_config: LLM provider configuration
-
-    Returns:
-        The translated text as a string
-
-    Raises:
-        Exception: For any API-related errors
+    Translate text using the configured LLM provider with function calling via Instructor.
     """
     if not text or not text.strip():
         return ""
 
     client = LLMClient(llm_config)
 
-    # Construct the messages for the chat completion
     messages = [
         {"role": "system", "content": system_message},
         {"role": "user", "content": user_prompt},
     ]
 
-    # Use function calling with structured output for guaranteed reliability
     result = client.chat_completion(
         messages=messages,
-        tools=[TRANSLATE_STRING_TOOL],
-        tool_choice="required",
-        temperature=0,  # Deterministic output for consistent translations
+        response_model=SingleTranslation,
+        temperature=0,
     )
 
-    # Extract translation from function call result
-    # The schema guarantees this will always have a "translation" key
-    return result["translation"]
+    return result.translation
 
 
 def translate_plural_with_llm(
     plural_json: str, system_message: str, user_prompt: str, llm_config: LLMConfig
 ) -> Dict[str, str]:
     """
-    Translate plural resources using the configured LLM provider with function calling.
-
-    This function handles plural resources and returns a structured dictionary.
-    Leverages function calling with structured outputs to guarantee correct schema.
-
-    Args:
-        plural_json: JSON string of plural forms to translate
-        system_message: System prompt defining the translator's role
-        user_prompt: User prompt with plural-specific guidelines
-        llm_config: LLM provider configuration
-
-    Returns:
-        Dictionary mapping plural quantity keys to translated strings
-        (e.g., {"one": "1 day", "other": "%d days"})
-
-    Raises:
-        Exception: For any API-related errors
+    Translate plural resources using the configured LLM provider with function calling via Instructor.
     """
     client = LLMClient(llm_config)
 
-    # Construct the messages for the chat completion
     messages = [
         {"role": "system", "content": system_message},
         {"role": "user", "content": user_prompt},
     ]
 
-    # Use function calling with structured output for guaranteed reliability
     result = client.chat_completion(
         messages=messages,
-        tools=[TRANSLATE_PLURAL_TOOL],
-        tool_choice="required",
-        temperature=0,  # Deterministic output for consistent translations
+        response_model=PluralTranslation,
+        temperature=0,
     )
 
-    # Extract translations from function call result
-    # The result now directly contains the plural keys (one, other, zero, two, few, many)
-    logger.debug(f"Received plural translation result keys: {list(result.keys())}")
-    logger.debug(f"Full plural translation result: {result}")
+    # Convert Pydantic model to dictionary
+    result_dict = result.model_dump(exclude_none=True)
 
-    # Validate that at least one plural key was returned
-    if not result:
-        raise ValueError("LLM returned empty result for plural resource translation")
-
-    # Validate that at least the "other" key is present (Android's mandatory fallback)
-    if "other" not in result:
+    # Validate mandatory 'other' fallback
+    if "other" not in result_dict:
         logger.warning(
             f"LLM did not provide 'other' key for plural translation. "
-            f"Provided keys: {list(result.keys())}. "
-            f"'other' is mandatory in Android as a fallback."
+            f"Provided keys: {list(result_dict.keys())}."
         )
-        # If there's only one key, use it as 'other' fallback
-        if len(result) == 1:
-            key = list(result.keys())[0]
-            result["other"] = result[key]
-            logger.info(f"Using '{key}' value as 'other' fallback")
-        elif len(result) == 0:
+        if len(result_dict) == 1:
+            key = list(result_dict.keys())[0]
+            result_dict["other"] = result_dict[key]
+        elif len(result_dict) == 0:
             raise ValueError("LLM returned no plural translations")
 
-    return result
+    return result_dict
 
 
 def translate_strings_batch_with_llm(
@@ -573,45 +287,19 @@ def translate_strings_batch_with_llm(
     reference_examples: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, str]:
     """
-    Translate multiple strings in a single API call using batch mode.
-
-    This function is much more cost-efficient than translating one-by-one
-    because it sends the system prompt and guidelines only once for all strings.
-
-    Args:
-        strings_dict: Dictionary mapping string keys to source texts
-                     (e.g., {"welcome_msg": "Welcome!", "goodbye_msg": "Goodbye!"})
-        system_message: System prompt defining the translator's role
-        user_prompt: User prompt with translation guidelines (without the strings)
-        llm_config: LLM provider configuration
-        reference_examples: Optional list of existing translations from the target
-                            project to provide style/context (read-only)
-
-    Returns:
-        Dictionary mapping string keys to translated texts
-
-    Raises:
-        ValueError: If the LLM returns an empty translations array or omits any
-                    requested keys from the batch result
-        Exception: For any API-related errors
+    Translate multiple strings in a single API call using batch mode via Instructor.
     """
     if not strings_dict:
         return {}
 
     client = LLMClient(llm_config)
 
-    # Format the strings as JSON for the prompt
     import json
 
     strings_json = json.dumps(strings_dict, indent=2, ensure_ascii=False)
-
     full_user_prompt = user_prompt
 
     if reference_examples:
-        logger.debug(
-            "Including %d reference string translations for context",
-            len(reference_examples),
-        )
         reference_json = json.dumps(reference_examples, indent=2, ensure_ascii=False)
         full_user_prompt += (
             "\n\nUse the following existing translations from the target project "
@@ -619,62 +307,31 @@ def translate_strings_batch_with_llm(
             + reference_json
         )
 
-    # Construct the full user prompt with all strings
-    # Make it crystal clear that we need to translate FROM English TO the target language
     full_user_prompt += (
         "\n\nTranslate ALL the strings below from English to the target language.\n"
         + "The strings are provided as JSON key-value pairs. Translate only the values:\n"
         + strings_json
     )
 
-    # Construct the messages for the chat completion
     messages = [
         {"role": "system", "content": system_message},
         {"role": "user", "content": full_user_prompt},
     ]
 
-    logger.info(f"Batch translating {len(strings_dict)} strings in a single API call")
-    logger.debug(f"System message length: {len(system_message)} chars")
-    logger.debug(f"User prompt length: {len(full_user_prompt)} chars")
-    logger.debug(f"First 200 chars of user prompt: {full_user_prompt[:200]}...")
-
-    # Use function calling with structured output for guaranteed reliability
     result = client.chat_completion(
         messages=messages,
-        tools=[TRANSLATE_STRINGS_BATCH_TOOL],
-        tool_choice="required",
-        temperature=0,  # Deterministic output for consistent translations
+        response_model=StringBatchTranslation,
+        temperature=0,
     )
 
-    # Extract translations from function call result
-    logger.debug(f"Raw batch string translation result: {result}")
-    logger.debug(f"Result keys: {list(result.keys())}")
-
-    translations_array = result.get("translations", [])
-
-    if not translations_array:
-        logger.error(f"LLM returned empty translations array. Full result: {result}")
-        raise ValueError("LLM returned empty translations array")
-
-    logger.info(f"Successfully received {len(translations_array)} translations")
-
-    # Convert array of {key, translation} objects to dictionary
     translations = {}
-    for item in translations_array:
-        key = item.get("key")
-        translation = item.get("translation")
-        if key and translation is not None:  # translation can be empty string
-            translations[key] = translation
-        else:
-            logger.warning(f"Invalid translation item: {item}")
+    for item in result.translations:
+        if item.key and item.translation is not None:
+            translations[item.key] = item.translation
 
     # Validate that we got translations for all requested keys
     missing_keys = set(strings_dict.keys()) - set(translations.keys())
     if missing_keys:
-        logger.error(
-            "LLM did not provide translations for some keys: %s",
-            sorted(missing_keys),
-        )
         raise ValueError(
             "LLM returned an incomplete translations array. Missing keys: "
             + ", ".join(sorted(missing_keys))
@@ -691,112 +348,55 @@ def translate_plurals_batch_with_llm(
     reference_examples: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Dict[str, str]]:
     """
-    Translate multiple plural resources in a single API call using batch mode.
-
-    This function is much more cost-efficient than translating one-by-one
-    because it sends the system prompt and guidelines only once for all plurals.
-
-    Args:
-        plurals_dict: Dictionary mapping plural names to their quantity forms
-                     (e.g., {"days_left": {"one": "1 day", "other": "%d days"}})
-        system_message: System prompt defining the translator's role
-        user_prompt: User prompt with translation guidelines (without the plurals)
-        llm_config: LLM provider configuration
-        reference_examples: Optional list of existing plural translations from the
-                            target project for additional context (read-only)
-
-    Returns:
-        Dictionary mapping plural names to their translated quantity forms
-
-    Raises:
-        Exception: For any API-related errors
+    Translate multiple plural resources in a single API call using batch mode via Instructor.
     """
     if not plurals_dict:
         return {}
 
     client = LLMClient(llm_config)
 
-    # Format the plurals as JSON for the prompt
     import json
 
     plurals_json = json.dumps(plurals_dict, indent=2, ensure_ascii=False)
-
     full_user_prompt = user_prompt
 
     if reference_examples:
-        logger.debug(
-            "Including %d reference plural translations for context",
-            len(reference_examples),
-        )
         reference_json = json.dumps(reference_examples, indent=2, ensure_ascii=False)
         full_user_prompt += (
             "\n\nUse the following existing plural translations from the target "
             "project as context. Do not modify them:\n" + reference_json
         )
 
-    # Construct the full user prompt with all plurals
-    # Make it crystal clear that we need to translate FROM English TO the target language
     full_user_prompt += (
         "\n\nTranslate ALL the plural resources below from English to the target language.\n"
         + "Each plural resource has a name and quantity forms. Translate the text in each quantity form:\n"
         + plurals_json
     )
 
-    # Construct the messages for the chat completion
     messages = [
         {"role": "system", "content": system_message},
         {"role": "user", "content": full_user_prompt},
     ]
 
-    logger.info(f"Batch translating {len(plurals_dict)} plurals in a single API call")
-
-    # Use function calling with structured output for guaranteed reliability
     result = client.chat_completion(
         messages=messages,
-        tools=[TRANSLATE_PLURALS_BATCH_TOOL],
-        tool_choice="required",
-        temperature=0,  # Deterministic output for consistent translations
+        response_model=PluralsBatchTranslation,
+        temperature=0,
     )
 
-    # Extract translations from function call result
-    translations_array = result.get("translations", [])
-
-    if not translations_array:
-        raise ValueError("LLM returned empty translations array")
-
-    logger.info(f"Successfully received {len(translations_array)} plural translations")
-
-    # Convert array of {plural_name, quantities} objects to dictionary
     translations = {}
-    for item in translations_array:
-        plural_name = item.get("plural_name")
-        quantities = item.get("quantities", {})
+    for item in result.translations:
+        plural_name = item.plural_name
+        quantities_dict = item.quantities.model_dump(exclude_none=True)
 
-        if plural_name and quantities:
-            translations[plural_name] = quantities
-        else:
-            logger.warning(f"Invalid plural translation item: {item}")
+        if plural_name and quantities_dict:
+            translations[plural_name] = quantities_dict
 
-    # Validate that we got translations for all requested plural names
-    missing_plurals = set(plurals_dict.keys()) - set(translations.keys())
-    if missing_plurals:
-        logger.warning(
-            f"LLM did not provide translations for some plurals: {missing_plurals}"
-        )
-
-    # Validate that each plural has at least the "other" key (Android requirement)
+    # Post-process missing other fallbacks
     for plural_name, quantities in translations.items():
         if "other" not in quantities:
-            logger.warning(
-                f"Plural '{plural_name}' missing 'other' key. "
-                f"Provided keys: {list(quantities.keys())}"
-            )
-            # Use the first available key as fallback
             if quantities:
                 first_key = list(quantities.keys())[0]
                 quantities["other"] = quantities[first_key]
-                logger.info(
-                    f"Using '{first_key}' value as 'other' fallback for '{plural_name}'"
-                )
 
     return translations

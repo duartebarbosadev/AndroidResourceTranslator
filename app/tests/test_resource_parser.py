@@ -215,7 +215,9 @@ class TestFindResourceFiles(TestResourceParser):
 
         modules = find_resource_files(self.temp_dir, ignore_folders=["build"])
 
-        self.assertEqual(len(modules), 1, "Should find only the rebuild_module resource")
+        self.assertEqual(
+            len(modules), 1, "Should find only the rebuild_module resource"
+        )
         self.assertEqual(list(modules.values())[0].name, "rebuild_module")
 
     def test_gitignore_patterns(self):
@@ -313,9 +315,7 @@ class TestFindResourceFiles(TestResourceParser):
         for folder_name in self.VALID_RESOURCE_FOLDER_LANGUAGES:
             self.create_strings_xml(os.path.join(base_path, folder_name, "strings.xml"))
 
-        self.create_strings_xml(
-            os.path.join(base_path, "mipmap-mdpi", "strings.xml")
-        )
+        self.create_strings_xml(os.path.join(base_path, "mipmap-mdpi", "strings.xml"))
 
         modules = find_resource_files(self.temp_dir)
 
@@ -376,7 +376,9 @@ class TestLanguageDetection(TestResourceParser):
 
         for path in invalid_paths:
             with self.subTest(path=path):
-                with self.assertRaisesRegex(ValueError, "Invalid Android locale qualifier"):
+                with self.assertRaisesRegex(
+                    ValueError, "Invalid Android locale qualifier"
+                ):
                     detect_language_from_path(path)
 
 

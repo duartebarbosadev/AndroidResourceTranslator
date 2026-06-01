@@ -24,7 +24,7 @@ from AndroidResourceTranslator import (
     create_translation_report,
     update_xml_file,
 )
-from llm_provider import LLMConfig, LLMProvider
+from llm_provider import LLMConfig
 
 
 class TestIntegration(unittest.TestCase):
@@ -116,7 +116,7 @@ class TestResourceFindingAndTranslation(TestIntegration):
 
         # Step 3: Perform auto-translation
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI, api_key="fake_api_key", model="fake_model"
+            provider="openai", api_key="fake_api_key", model="fake_model"
         )
 
         with patch("AndroidResourceTranslator.update_xml_file"):
@@ -241,7 +241,7 @@ class TestDuplicateModuleNames(TestIntegration):
 
         modules = find_resource_files(self.temp_dir.name)
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI, api_key="fake_api_key", model="fake_model"
+            provider="openai", api_key="fake_api_key", model="fake_model"
         )
 
         with patch("AndroidResourceTranslator.update_xml_file"):

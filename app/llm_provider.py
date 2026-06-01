@@ -4,17 +4,15 @@ LLM Provider Module
 
 This module provides an abstraction layer for communicating with different
 LLM providers (OpenAI, OpenRouter, Anthropic, Google, etc.) using a unified interface
-powered by LiteLLM and Instructor. It handles structured outputs with Pydantic
-and provider-specific configurations.
+powered by LiteLLM. It handles structured outputs with Pydantic and provider-specific
+configurations.
 """
 
 import logging
-from enum import Enum
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 import litellm
-import instructor
 
 logger = logging.getLogger(__name__)
 
@@ -102,50 +100,35 @@ class PluralsBatchTranslation(BaseModel):
 # ------------------------------------------------------------------------------
 
 
-class LLMProvider(Enum):
-    """Supported LLM providers."""
-
-    OPENAI = "openai"
-    OPENROUTER = "openrouter"
-
-
 @dataclass
 class LLMConfig:
     """
     Configuration for LLM API access.
     """
 
-    provider: LLMProvider
-    api_key: str
+    provider: str
     model: str
+    api_key: Optional[str] = None
     site_url: Optional[str] = None
     site_name: Optional[str] = None
     send_site_info: bool = True
 
     def __post_init__(self):
         """Validate configuration after initialization."""
-        if isinstance(self.provider, str):
-            self.provider = LLMProvider(self.provider.lower())
-
-        if not self.api_key:
-            raise ValueError("API key is required")
-
         if not self.model:
             raise ValueError("Model name is required")
 
 
 class LLMClient:
     """
-    Client for interacting with LLM APIs using LiteLLM and Instructor.
+    Client for interacting with LLM APIs using LiteLLM.
     """
 
     def __init__(self, config: LLMConfig):
         self.config = config
-        # Patch LiteLLM with Instructor for robust structured outputs
-        self.client = instructor.from_litellm(completion=litellm.completion)
 
         logger.info(
-            f"Initialized LLM client with provider={config.provider.value}, "
+            f"Initialized LLM client with provider={config.provider}, "
             f"model={config.model}"
         )
 
@@ -157,31 +140,25 @@ class LLMClient:
         **kwargs,
     ) -> Any:
         """
-        Send a chat completion request to the LLM API using LiteLLM and Instructor.
+        Send a chat completion request to the LLM API using LiteLLM.
         """
-        # Format model string for LiteLLM
-        model_str = self.config.model
-        if self.config.provider == LLMProvider.OPENROUTER and not model_str.startswith(
-            "openrouter/"
-        ):
-            model_str = f"openrouter/{model_str}"
-        elif self.config.provider == LLMProvider.OPENAI and not any(
-            model_str.startswith(p) for p in ["openai/", "gpt-"]
-        ):
-            model_str = f"openai/{model_str}"
-
         # Build payload parameters
         api_params = {
-            "model": model_str,
+            "model": self.config.model,
+            "custom_llm_provider": self.config.provider,
             "messages": messages,
             "temperature": temperature,
-            "api_key": self.config.api_key,
+            "max_tokens": kwargs.pop("max_tokens", 4096),
             **kwargs,
         }
 
+        if self.config.api_key:
+            api_params["api_key"] = self.config.api_key
+
         # Add provider-specific headers (OpenRouter ranking / site info)
+        provider_lower = self.config.provider.lower() if self.config.provider else ""
         if (
-            self.config.provider == LLMProvider.OPENROUTER
+            provider_lower == "openrouter"
             and self.config.send_site_info
         ):
             extra_headers = {}
@@ -192,20 +169,35 @@ class LLMClient:
             if extra_headers:
                 api_params["extra_headers"] = extra_headers
 
+        # If response_model is provided, use LiteLLM's native structured outputs (response_format)
+        if response_model:
+            api_params["response_format"] = response_model
+
         logger.debug(
-            f"Sending chat completion request via LiteLLM (model: {model_str}, "
-            f"response_model: {response_model.__name__ if response_model else 'None'})"
+            f"Sending chat completion request via LiteLLM (model: {self.config.model}, "
+            f"provider: {self.config.provider})"
         )
 
         try:
-            if response_model:
-                return self.client.chat.completions.create(
-                    response_model=response_model,
-                    **api_params,
+            response = litellm.completion(**api_params)
+            message = response.choices[0].message
+            content = message.content or ""
+            content = content.strip()
+
+            reasoning_content = getattr(message, "reasoning_content", None) or ""
+            reasoning_content = reasoning_content.strip()
+
+            if not content and reasoning_content:
+                logger.info(
+                    "Content is empty but reasoning_content is present. "
+                    "Falling back to reasoning_content for structured output parsing."
                 )
-            else:
-                response = litellm.completion(**api_params)
-                return response.choices[0].message.content.strip()
+                content = reasoning_content
+
+            if response_model:
+                # Natively parse and validate the JSON string into the Pydantic model
+                return response_model.model_validate_json(content)
+            return content
 
         except Exception as e:
             logger.error(f"Error during LLM API call: {e}")

@@ -139,10 +139,10 @@ You can run models locally using **Ollama**:
 To run the translator on your local machine, execute:
 
 ```bash
-python AndroidResourceTranslator.py /path/to/your/android/project
+python app/AndroidResourceTranslator.py /path/to/your/android/project
 ```
 
-You can also pass additional parameters like `--project-context` or `--dry-run` (to only check for missing translations without translating) as needed.
+You can also pass additional parameters like `--api-key`, `--project-context`, or `--dry-run` (to only check for missing translations without translating) as needed.
 
 ## Configuration
 
@@ -162,17 +162,23 @@ The action supports the following inputs:
 | **ignore_folders**           | Comma-separated list of folder names to ignore during resource scanning. If empty, .gitignore file will be used instead.                                                                                                                     | `""`                                                                   | Yes      | `"build,temp,cache"`                                                   |
 | **include_reference_context** | Include existing translations from the destination language as context when prompting the LLM. Set to `"false"` to disable the extra context entirely.                                                                                       | `"true"`                                                               | Yes      | `"false"`                                                              |
 | **reference_context_limit**  | Maximum number of existing translations to send as context examples. Use `"0"` to skip sending any reference strings even if context is enabled.                                                                                               | `"25"`                                                                 | Yes      | `"10"`                                                                 |
+| **batch_size**               | Maximum number of items to translate in a single batch API call. Decrease this if you are using a local model with reasoning that gets truncated by token limits.                                                                             | `"10"`                                                                 | Yes      | `"10"`, `"5"`                                                          |
 
 ### Environment Variables (API Keys)
 
-Set these as repository secrets and pass them via `env:` in your workflow:
+Since the engine natively integrates **LiteLLM**, it automatically supports any LLM provider key by mapping them dynamically. 
 
-| Variable                | Description                                      | Required For                    |
-| ----------------------- | ------------------------------------------------ | ------------------------------- |
-| **OPENAI_API_KEY**      | OpenAI API key                                   | OpenAI provider                 |
-| **OPENROUTER_API_KEY**  | OpenRouter API key                               | OpenRouter provider             |
-| **ANTHROPIC_API_KEY**  | Anthropic Claude API key                         | Anthropic Claude provider       |
-| **GEMINI_API_KEY**      | Google Gemini API key                            | Google Gemini provider          |
+Set the appropriate key as a repository secret and pass it via `env:` in your workflow:
+
+* **Universal Variable**: You can pass a generic **`API_KEY`** which works across all providers, or pass it directly on the command line via `--api-key YOUR_KEY`.
+* **Provider-Specific Variables**: The script automatically detects and resolves `{PROVIDER}_API_KEY` depending on what you supply in `llm_provider`. For example:
+  * **`OPENAI_API_KEY`** when using `llm_provider: openai`
+  * **`OPENROUTER_API_KEY`** when using `llm_provider: openrouter`
+  * **`ANTHROPIC_API_KEY`** when using `llm_provider: anthropic`
+  * **`GEMINI_API_KEY`** when using `llm_provider: gemini`
+  * **`GROQ_API_KEY`** when using `llm_provider: groq`
+  * **`MISTRAL_API_KEY`** when using `llm_provider: mistral`
+  * ... and any other [LiteLLM-supported provider key](https://docs.litellm.ai/docs/providers)!
 
 ## Translation Report Output
 

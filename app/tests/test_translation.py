@@ -31,7 +31,7 @@ from string_utils import (
     escape_double_quotes,
     escape_special_chars,
 )
-from llm_provider import LLMConfig, LLMProvider, translate_strings_batch_with_llm
+from llm_provider import LLMConfig, translate_strings_batch_with_llm
 
 
 class TestSpecialCharacterEscaping(unittest.TestCase):
@@ -305,7 +305,7 @@ class TestAutoTranslation(unittest.TestCase):
 
         # Create LLMConfig
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+            provider="openai", api_key="test_api_key", model="test-model"
         )
 
         # Execute auto translation
@@ -390,7 +390,7 @@ class TestAutoTranslation(unittest.TestCase):
         mock_translate_strings_batch.return_value = {"hello": "Hola de nuevo"}
 
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+            provider="openai", api_key="test_api_key", model="test-model"
         )
 
         result = auto_translate_resources(
@@ -438,7 +438,7 @@ class TestAutoTranslation(unittest.TestCase):
         }
 
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+            provider="openai", api_key="test_api_key", model="test-model"
         )
 
         auto_translate_resources(
@@ -494,7 +494,7 @@ class TestAutoTranslation(unittest.TestCase):
         module.add_resource("sv", sv_resource)
 
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+            provider="openai", api_key="test_api_key", model="test-model"
         )
 
         result = auto_translate_resources(
@@ -538,7 +538,7 @@ class TestAutoTranslation(unittest.TestCase):
         module.add_resource("pt", target_resource)
 
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+            provider="openai", api_key="test_api_key", model="test-model"
         )
 
         result = auto_translate_resources(
@@ -567,7 +567,7 @@ class TestAutoTranslation(unittest.TestCase):
         )
 
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+            provider="openai", api_key="test_api_key", model="test-model"
         )
 
         with self.assertRaisesRegex(ValueError, "Missing keys: goodbye"):
@@ -599,7 +599,7 @@ class TestBatchTranslationSafety(unittest.TestCase):
                 )
 
         llm_config = LLMConfig(
-            provider=LLMProvider.OPENAI, api_key="test_api_key", model="test-model"
+            provider="openai", api_key="test_api_key", model="test-model"
         )
 
         with patch("llm_provider.LLMClient", FakeClient):

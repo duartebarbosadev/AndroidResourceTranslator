@@ -1,16 +1,10 @@
 name: "Android Resource Translator"
-description: "Checks Android resource files for missing translations and automatically translates them using OpenAI or OpenRouter."
+description: "Checks Android resource files for missing translations and automatically translates them using modern LLM providers."
 author: "DuarteBarbosaDev"
 
 branding:
   icon: 'book-open'
   color: 'green'
-
-env:
-  OPENROUTER_API_KEY:
-    description: "OpenRouter API key (required by default, supports Gemini, Claude, GPT, and more)"
-  OPENAI_API_KEY:
-    description: "OpenAI API key (when using OpenAI provider)"
 
 inputs:
   resources_paths:
@@ -26,11 +20,11 @@ inputs:
     required: false
     default: "false"
   llm_provider:
-    description: "LLM provider to use: 'openai' or 'openrouter' (default: openrouter)"
+    description: "LLM provider to use (e.g. openrouter, openai, gemini, anthropic, ollama, lm_studio)"
     required: false
     default: "openrouter"
   model:
-    description: "Model to use for translation (e.g., 'google/gemini-2.5-flash' for OpenRouter, 'gpt-4o-mini' for OpenAI)"
+    description: "Model to use for translation (e.g. 'google/gemini-2.5-flash', 'gpt-4o-mini', 'claude-3-5-sonnet-latest')"
     required: false
     default: "google/gemini-2.5-flash"
   openrouter_site_url:
@@ -61,6 +55,10 @@ inputs:
     description: "Maximum number of existing translations to include as context (0 disables context)."
     required: false
     default: "25"
+  batch_size:
+    description: "Maximum number of items to translate in a single batch API call (default: 10)."
+    required: false
+    default: "10"
 
 outputs:
   translation_report:

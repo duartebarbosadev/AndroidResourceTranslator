@@ -3,7 +3,7 @@
 Android Resource Auto-Translator
 
 This script scans Android resource files (strings.xml) for string and plural resources,
-reports missing translations, and can automatically translate missing entries using OpenAI.
+reports missing translations, and can automatically translate missing entries using modern LLM providers.
 """
 
 import logging
@@ -30,7 +30,6 @@ from git_utils import (
 
 # Import LLM provider utilities
 from llm_provider import (
-    LLMProvider,
     LLMConfig,
     translate_strings_batch_with_llm,
     translate_plurals_batch_with_llm,
@@ -41,7 +40,7 @@ from llm_provider import (
 # ------------------------------------------------------------------------------
 
 # Maximum number of items to translate in a single batch API call
-MAX_BATCH_SIZE = 100
+MAX_BATCH_SIZE = 10
 # Default number of existing translation pairs/plurals to include as context
 DEFAULT_REFERENCE_CONTEXT_LIMIT = 25
 
@@ -116,13 +115,10 @@ After completing translation:
 5. Confirm that the formality level is appropriate and consistent
 6. Verify all rules and guidelines have been followed!
 
-**IMPORTANT Output Requirements:**  
-Return ONLY the final translated text as a single plain line! Preserving only any required formatting from the source.
-Do not include the surrounding Android XML structure (<string> tags, etc.). Only output the translated content!
-Example:
-  Input: "Welcome, <b>%1$s</b>! You have %2$d points."
-  Correct output: "Dobrodošli, <b>%1$s</b>! Imate %2$d poena."
-  INCORRECT output: "<string name="welcome_message">Dobrodošli, <b>%1$s</b>! Imate %2$d poena.</string>"
+**Output Requirements:**
+- Translate only the values. Preserve all JSON keys exactly as provided.
+- Do not include any surrounding Android XML structure (<string> tags, etc.). Only output the translated content.
+- Ensure that the final response strictly adheres to the requested JSON response schema.
 """
 PLURAL_GUIDELINES_ADDITION = """\
 For plural resources, follow these guidelines:
@@ -138,10 +134,6 @@ For plural resources, follow these guidelines:
 """
 SYSTEM_MESSAGE_TEMPLATE = """\
 You are a professional translator translating textual UI elements within an Android from English into {target_language}. Follow user guidelines closely.
-"""
-TRANSLATE_FINAL_TEXT = """\
-Translate the following string provided after the dashed line to language: {target_language}
-----------
 """
 
 # ------------------------------------------------------------------------------
@@ -1091,9 +1083,7 @@ def _translate_missing_strings(
     language_name = get_language_name(lang)
 
     # Build the base prompt (without specific strings)
-    base_prompt = TRANSLATION_GUIDELINES + TRANSLATE_FINAL_TEXT.format(
-        target_language=language_name
-    )
+    base_prompt = TRANSLATION_GUIDELINES
 
     # Configure the system message
     system_message = SYSTEM_MESSAGE_TEMPLATE.format(target_language=language_name)
@@ -1210,7 +1200,6 @@ def _translate_missing_plurals(
     base_prompt = (
         TRANSLATION_GUIDELINES
         + PLURAL_GUIDELINES_ADDITION
-        + TRANSLATE_FINAL_TEXT.format(target_language=language_name)
     )
 
     # Configure the system message
@@ -1759,6 +1748,7 @@ def main() -> None:
     Parses command-line arguments or environment variables, finds resource files,
     checks for missing translations, and auto-translates them.
     """
+    global MAX_BATCH_SIZE
     is_github = os.environ.get("GITHUB_ACTIONS", "false").lower() == "true"
     if is_github:
         resources_paths_input = os.environ.get("INPUT_RESOURCES_PATHS")
@@ -1772,17 +1762,15 @@ def main() -> None:
 
         # LLM Provider configuration
         llm_provider = os.environ.get("INPUT_LLM_PROVIDER", "openrouter").lower()
-        model = os.environ.get("INPUT_MODEL") or os.environ.get(
-            "INPUT_OPENAI_MODEL", "google/gemini-2.5-flash"
-        )  # Support legacy param
+        model = os.environ.get("INPUT_MODEL", "google/gemini-2.5-flash")
 
-        # API Keys - check provider-specific key first, then fall back to OpenAI key for compatibility
-        if llm_provider == "openrouter":
-            api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get(
-                "OPENAI_API_KEY"
-            )
-        else:
-            api_key = os.environ.get("OPENAI_API_KEY")
+        # API Keys - Resolve API key dynamically based on provider or standard variables
+        provider_upper = llm_provider.upper()
+        api_key = (
+            os.environ.get("INPUT_API_KEY") or
+            os.environ.get("API_KEY") or
+            os.environ.get(f"{provider_upper}_API_KEY")
+        )
 
         # OpenRouter-specific settings
         openrouter_site_url = os.environ.get(
@@ -1813,6 +1801,18 @@ def main() -> None:
                 f"{DEFAULT_REFERENCE_CONTEXT_LIMIT}"
             )
             reference_context_limit = DEFAULT_REFERENCE_CONTEXT_LIMIT
+
+        batch_size_raw = os.environ.get("INPUT_BATCH_SIZE", "10")
+        try:
+            MAX_BATCH_SIZE = int(batch_size_raw)
+            if MAX_BATCH_SIZE <= 0:
+                raise ValueError()
+        except ValueError:
+            print(
+                f"Invalid INPUT_BATCH_SIZE value ('{batch_size_raw}'); "
+                f"falling back to 10"
+            )
+            MAX_BATCH_SIZE = 10
 
         ignore_folders_input = os.environ.get("INPUT_IGNORE_FOLDERS", "")
         ignore_folders = (
@@ -1852,34 +1852,18 @@ def main() -> None:
         # LLM Provider arguments
         parser.add_argument(
             "--llm-provider",
-            choices=["openai", "openrouter"],
             default="openrouter",
-            help="LLM provider to use (default: openrouter)",
+            help="LLM provider to use (e.g. openrouter, openai, gemini, anthropic, ollama, lm_studio)",
+        )
+        parser.add_argument(
+            "--api-key",
+            default=None,
+            help="API key for the chosen LLM provider (optional; can also be set via standard environment variables)",
         )
         parser.add_argument(
             "--model",
             default="google/gemini-2.5-flash",
             help="Model to use for translation (default: google/gemini-2.5-flash)",
-        )
-        parser.add_argument(
-            "--openai-model",
-            dest="model_legacy",
-            default=None,
-            help="(Deprecated: use --model) OpenAI model to use",
-        )
-
-        # API Key arguments
-        parser.add_argument(
-            "--openai-api-key",
-            dest="openai_api_key",
-            default=None,
-            help="OpenAI API key",
-        )
-        parser.add_argument(
-            "--openrouter-api-key",
-            dest="openrouter_api_key",
-            default=None,
-            help="OpenRouter API key",
         )
 
         # OpenRouter-specific arguments
@@ -1937,6 +1921,12 @@ def main() -> None:
             default=DEFAULT_REFERENCE_CONTEXT_LIMIT,
             help="Maximum number of existing translations to include as context (0 disables context).",
         )
+        parser.add_argument(
+            "--batch-size",
+            type=int,
+            default=10,
+            help="Maximum number of items to translate in a single batch API call (default: 10)",
+        )
 
         args = parser.parse_args()
 
@@ -1946,13 +1936,24 @@ def main() -> None:
 
         # LLM Provider configuration
         llm_provider = args.llm_provider
-        model = args.model_legacy or args.model  # Support legacy --openai-model
+        model = args.model
 
-        # API Keys - determine based on provider (strict matching)
-        if llm_provider == "openrouter":
-            api_key = args.openrouter_api_key or os.environ.get("OPENROUTER_API_KEY")
-        else:
-            api_key = args.openai_api_key or os.environ.get("OPENAI_API_KEY")
+        # API Keys - Determine dynamically with standard fallbacks
+        provider_upper = llm_provider.upper()
+        api_key = (
+            args.api_key or
+            os.environ.get("INPUT_API_KEY") or
+            os.environ.get("API_KEY") or
+            os.environ.get(f"{provider_upper}_API_KEY")
+        )
+
+        MAX_BATCH_SIZE = args.batch_size
+        if MAX_BATCH_SIZE <= 0:
+            print(
+                f"Invalid batch size {MAX_BATCH_SIZE}; "
+                f"falling back to 10"
+            )
+            MAX_BATCH_SIZE = 10
 
         openrouter_site_url = args.openrouter_site_url
         openrouter_site_name = args.openrouter_site_name
@@ -2000,35 +2001,26 @@ def main() -> None:
     configure_logging(log_trace)
 
     # Early validation: Check API key if not in dry-run mode
-    if not dry_run and not api_key:
-        env_var_name = (
-            "OPENROUTER_API_KEY" if llm_provider == "openrouter" else "OPENAI_API_KEY"
-        )
-        print("\n========================================")
-        print("ERROR: API key not found!")
-        print("========================================")
-        print(
-            "Translation is enabled (not in dry-run mode) but no API key was provided."
-        )
-        print("\nTo fix this:")
-        print(
-            f"\n1. For GitHub Actions, add {env_var_name} to your repository secrets:"
-        )
-        print("   - Go to Settings > Secrets and variables > Actions")
-        print(f"   - Add a new secret named: {env_var_name}")
-        print("   - Pass it via env in your workflow:")
-        print("     env:")
-        print(f"       {env_var_name}: ${{{{ secrets.{env_var_name} }}}}")
-        print("\n2. For local execution, set the environment variable:")
-        print(f"   export {env_var_name}=your_key_here")
-        print("\n3. Or pass it as a command-line argument:")
-        print(f"   --{llm_provider}-api-key YOUR_KEY")
-        if llm_provider == "openrouter":
-            print("\nGet your API key at: https://openrouter.ai/keys")
+    # Local/offline providers (like lm_studio, ollama) do not require API keys
+    local_providers = ["lm_studio", "ollama"]
+    if not dry_run and not api_key and llm_provider not in local_providers:
+        provider_upper = llm_provider.upper()
+        env_var_name = f"{provider_upper}_API_KEY"
+        known_cloud_providers = ["openai", "openrouter", "gemini", "anthropic", "cohere", "groq", "mistral", "azure"]
+        if llm_provider in known_cloud_providers:
+            print("\n========================================")
+            print(f"ERROR: API key for provider '{llm_provider}' not found!")
+            print("========================================")
+            print(f"Translation is enabled (not in dry-run mode) but no key was provided for '{llm_provider}'.")
+            print(f"\nPlease set the environment variable: export {env_var_name}=your_key")
+            print("Or pass it via the command-line: --api-key your_key")
+            print("========================================\n")
+            sys.exit(1)
         else:
-            print("\nGet your API key at: https://platform.openai.com/api-keys")
-        print("========================================\n")
-        sys.exit(1)
+            logger.warning(
+                f"No API key provided for provider '{llm_provider}'. "
+                f"Proceeding assuming local execution or that the provider handles authentication internally."
+            )
 
     if not resources_paths:
         print("Error: 'resources_paths' input not provided.")
@@ -2076,7 +2068,7 @@ def main() -> None:
         # Create LLM configuration
         try:
             llm_config = LLMConfig(
-                provider=LLMProvider(llm_provider),
+                provider=llm_provider,
                 api_key=api_key,
                 model=model,
                 site_url=openrouter_site_url if llm_provider == "openrouter" else None,

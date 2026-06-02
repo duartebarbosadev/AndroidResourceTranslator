@@ -13,6 +13,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 # Add parent directory to path for module import
@@ -25,6 +26,9 @@ from AndroidResourceTranslator import (
     detect_updated_default_resources,
     _find_updated_default_resource_entries,
     _normalize_github_event_path,
+    _normalize_llm_provider,
+    _resolve_api_key,
+    _validate_api_key_for_provider,
 )
 from string_utils import (
     escape_apostrophes,
@@ -32,7 +36,9 @@ from string_utils import (
     escape_special_chars,
 )
 from llm_provider import (
+    LLMClient,
     LLMConfig,
+    StringBatchTranslation,
     translate_plural_with_llm,
     translate_plurals_batch_with_llm,
     translate_with_llm,
@@ -590,6 +596,94 @@ class TestAutoTranslation(unittest.TestCase):
 class TestBatchTranslationSafety(unittest.TestCase):
     """Tests for safe handling of incomplete batch responses."""
 
+    def test_normalize_llm_provider_defaults_blank_values(self):
+        """Blank provider inputs should not reach LiteLLM as empty providers."""
+
+        self.assertEqual(_normalize_llm_provider(None), "openrouter")
+        self.assertEqual(_normalize_llm_provider("   "), "openrouter")
+        self.assertEqual(_normalize_llm_provider(" OpenAI "), "openai")
+
+    def test_resolve_api_key_ignores_blank_values(self):
+        """Whitespace-only keys should not satisfy API key resolution."""
+
+        with patch.dict(
+            os.environ,
+            {"API_KEY": "   ", "OPENROUTER_API_KEY": " provider-key "},
+            clear=True,
+        ):
+            self.assertEqual(_resolve_api_key("openrouter"), "provider-key")
+
+    def test_validate_api_key_allows_local_providers_without_key(self):
+        """Local providers intentionally do not require remote API credentials."""
+
+        _validate_api_key_for_provider("ollama", None)
+        _validate_api_key_for_provider("lm_studio", "")
+
+    def test_validate_api_key_rejects_remote_provider_without_key(self):
+        """Remote providers should fail before LiteLLM emits provider-specific errors."""
+
+        with self.assertRaisesRegex(
+            ValueError, "API key not found for remote LLM provider 'openrouter'"
+        ):
+            _validate_api_key_for_provider("openrouter", "   ")
+
+    def test_llm_client_accepts_fenced_raw_string_batch_json(self):
+        """Some providers return a fenced key-value map instead of the schema wrapper."""
+
+        response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content='```json\n{"hello": "Hola", "goodbye": "Adiós"}\n```',
+                        reasoning_content=None,
+                    )
+                )
+            ]
+        )
+        llm_config = LLMConfig(provider="openrouter", model="openrouter/owl-alpha")
+
+        with patch(
+            "llm_provider.litellm.completion", return_value=response
+        ) as mock_completion:
+            result = LLMClient(llm_config).chat_completion(
+                messages=[],
+                response_model=StringBatchTranslation,
+                temperature=0,
+            )
+
+        self.assertEqual(
+            [(item.key, item.translation) for item in result.translations],
+            [("hello", "Hola"), ("goodbye", "Adiós")],
+        )
+        self.assertEqual(mock_completion.call_args.kwargs["timeout"], 60)
+
+    def test_llm_client_accepts_dict_style_message(self):
+        """LiteLLM responses can expose message data with dict-style access."""
+
+        response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message={
+                        "content": '{"translations": [{"key": "hello", "translation": "Hola"}]}',
+                        "reasoning_content": None,
+                    }
+                )
+            ]
+        )
+        llm_config = LLMConfig(provider="openrouter", model="openrouter/owl-alpha")
+
+        with patch("llm_provider.litellm.completion", return_value=response):
+            result = LLMClient(llm_config).chat_completion(
+                messages=[],
+                response_model=StringBatchTranslation,
+                temperature=0,
+            )
+
+        self.assertEqual(
+            [(item.key, item.translation) for item in result.translations],
+            [("hello", "Hola")],
+        )
+
     def test_translate_with_llm_includes_text_in_prompt(self):
         """Single string helper should pass the source text to the model."""
 
@@ -703,6 +797,34 @@ class TestBatchTranslationSafety(unittest.TestCase):
 
         self.assertEqual(result, {"one": "1 día", "other": "1 día"})
 
+    def test_translate_plural_uses_first_quantity_as_other_fallback(self):
+        """Plural translation should recover even when multiple quantities omit other."""
+
+        from llm_provider import PluralTranslation
+
+        class FakeClient:
+            def __init__(self, config):
+                self.config = config
+
+            def chat_completion(self, **kwargs):
+                return PluralTranslation(few="%d días", many="%d días")
+
+        llm_config = LLMConfig(
+            provider="openai", api_key="test_api_key", model="test-model"
+        )
+
+        with patch("llm_provider.LLMClient", FakeClient):
+            result = translate_plural_with_llm(
+                plural_json='{"few": "%d days", "many": "%d days"}',
+                system_message="System",
+                user_prompt="Prompt",
+                llm_config=llm_config,
+            )
+
+        self.assertEqual(
+            result, {"few": "%d días", "many": "%d días", "other": "%d días"}
+        )
+
     def test_translate_plurals_batch_uses_single_quantity_as_other_fallback(self):
         """Batch plural translation should recover per plural item."""
 
@@ -739,6 +861,45 @@ class TestBatchTranslationSafety(unittest.TestCase):
             )
 
         self.assertEqual(result, {"days_left": {"one": "1 día", "other": "1 día"}})
+
+    def test_translate_plurals_batch_raises_on_missing_plurals(self):
+        """Batch plural translation should reject partial LLM batch results."""
+
+        from llm_provider import (
+            PluralBatchItem,
+            PluralTranslation,
+            PluralsBatchTranslation,
+        )
+
+        class FakeClient:
+            def __init__(self, config):
+                self.config = config
+
+            def chat_completion(self, **kwargs):
+                return PluralsBatchTranslation(
+                    translations=[
+                        PluralBatchItem(
+                            plural_name="days_left",
+                            quantities=PluralTranslation(other="%d días"),
+                        )
+                    ]
+                )
+
+        llm_config = LLMConfig(
+            provider="openai", api_key="test_api_key", model="test-model"
+        )
+
+        with patch("llm_provider.LLMClient", FakeClient):
+            with self.assertRaisesRegex(ValueError, "Missing plurals: items_count"):
+                translate_plurals_batch_with_llm(
+                    plurals_dict={
+                        "days_left": {"other": "%d days"},
+                        "items_count": {"other": "%d items"},
+                    },
+                    system_message="System",
+                    user_prompt="Prompt",
+                    llm_config=llm_config,
+                )
 
 
 if __name__ == "__main__":

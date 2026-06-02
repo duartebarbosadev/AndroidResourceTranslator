@@ -140,7 +140,22 @@ You are a professional translator translating textual UI elements within an Andr
 
 def _normalize_llm_provider(provider: Optional[str]) -> str:
     """Normalize provider names from CLI or GitHub Action inputs."""
-    return (provider or "openrouter").strip().lower()
+    normalized = (provider or "").strip().lower()
+    return normalized or "openrouter"
+
+
+def _provider_api_key_env_var(provider: str) -> str:
+    """Return the provider-specific API key environment variable name."""
+    provider_key = re.sub(r"[^A-Za-z0-9]+", "_", provider).strip("_").upper()
+    return f"{provider_key}_API_KEY"
+
+
+def _first_non_blank(*values: Optional[str]) -> Optional[str]:
+    """Return the first non-empty value after trimming surrounding whitespace."""
+    for value in values:
+        if value and value.strip():
+            return value.strip()
+    return None
 
 
 def _resolve_api_key(
@@ -148,11 +163,26 @@ def _resolve_api_key(
     explicit_api_key: Optional[str] = None,
 ) -> Optional[str]:
     """Resolve API keys from explicit, generic, or provider-specific sources."""
-    provider_upper = provider.upper()
-    return (
-        explicit_api_key
-        or os.environ.get("API_KEY")
-        or os.environ.get(f"{provider_upper}_API_KEY")
+    provider = _normalize_llm_provider(provider)
+    return _first_non_blank(
+        explicit_api_key,
+        os.environ.get("API_KEY"),
+        os.environ.get(_provider_api_key_env_var(provider)),
+    )
+
+
+def _validate_api_key_for_provider(provider: str, api_key: Optional[str]) -> None:
+    """Ensure remote LLM providers have an API key before translation starts."""
+    provider = _normalize_llm_provider(provider)
+    if provider in LOCAL_LLM_PROVIDERS:
+        return
+    if api_key and api_key.strip():
+        return
+
+    provider_env_var = _provider_api_key_env_var(provider)
+    raise ValueError(
+        f"API key not found for remote LLM provider '{provider}'. "
+        f"Set API_KEY or {provider_env_var}, or pass --api-key."
     )
 
 
@@ -2009,6 +2039,13 @@ def main() -> None:
         print(runtime_details)
 
     configure_logging(log_trace)
+
+    if not dry_run:
+        try:
+            _validate_api_key_for_provider(llm_provider, api_key)
+        except ValueError as e:
+            logger.error(str(e))
+            sys.exit(1)
 
     if not resources_paths:
         print("Error: 'resources_paths' input not provided.")

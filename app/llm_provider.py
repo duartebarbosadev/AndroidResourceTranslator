@@ -9,12 +9,15 @@ configurations.
 """
 
 import logging
+import json
+import re
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 import litellm
 
 logger = logging.getLogger(__name__)
+DEFAULT_LLM_TIMEOUT_SECONDS = 60
 
 # Suppress noisy logging from litellm/openai unless error/warning
 litellm.set_verbose = False
@@ -23,7 +26,7 @@ logging.getLogger("litellm").setLevel(logging.WARNING)
 
 
 # ------------------------------------------------------------------------------
-# Pydantic Schemas for Structured Outputs (Instructor)
+# Pydantic Schemas for Structured Outputs
 # ------------------------------------------------------------------------------
 
 
@@ -114,6 +117,7 @@ class LLMConfig:
     site_url: Optional[str] = None
     site_name: Optional[str] = None
     send_site_info: bool = True
+    timeout_seconds: int = DEFAULT_LLM_TIMEOUT_SECONDS
 
     def __post_init__(self):
         """Validate configuration after initialization."""
@@ -134,6 +138,54 @@ class LLMClient:
             f"model={config.model}"
         )
 
+    @staticmethod
+    def _strip_json_markdown_fence(content: str) -> str:
+        """Remove a surrounding Markdown code fence from model JSON output."""
+        match = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", content, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return content
+
+    @staticmethod
+    def _coerce_structured_payload(
+        content: str, response_model: type[BaseModel]
+    ) -> str:
+        """Normalize common provider deviations before Pydantic validation."""
+        content = LLMClient._strip_json_markdown_fence(content)
+
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            return content
+
+        if response_model is StringBatchTranslation and isinstance(payload, dict):
+            if "translations" not in payload:
+                payload = {
+                    "translations": [
+                        {"key": key, "translation": value}
+                        for key, value in payload.items()
+                    ]
+                }
+        elif response_model is PluralsBatchTranslation and isinstance(payload, dict):
+            if "translations" not in payload:
+                payload = {
+                    "translations": [
+                        {"plural_name": key, "quantities": value}
+                        for key, value in payload.items()
+                    ]
+                }
+
+        return json.dumps(payload, ensure_ascii=False)
+
+    @staticmethod
+    def _get_message_value(message: Any, key: str) -> str:
+        """Read a string field from either an object-style or dict-style message."""
+        if isinstance(message, dict):
+            value = message.get(key)
+        else:
+            value = getattr(message, key, None)
+        return value if isinstance(value, str) else ""
+
     def chat_completion(
         self,
         messages: list,
@@ -151,6 +203,7 @@ class LLMClient:
             "messages": messages,
             "temperature": temperature,
             "max_tokens": kwargs.pop("max_tokens", 4096),
+            "timeout": kwargs.pop("timeout", self.config.timeout_seconds),
             **kwargs,
         }
 
@@ -180,11 +233,10 @@ class LLMClient:
         try:
             response = litellm.completion(**api_params)
             message = response.choices[0].message
-            content = message.content or ""
-            content = content.strip()
-
-            reasoning_content = getattr(message, "reasoning_content", None) or ""
-            reasoning_content = reasoning_content.strip()
+            content = self._get_message_value(message, "content").strip()
+            reasoning_content = self._get_message_value(
+                message, "reasoning_content"
+            ).strip()
 
             if not content and reasoning_content:
                 logger.info(
@@ -195,6 +247,7 @@ class LLMClient:
 
             if response_model:
                 # Natively parse and validate the JSON string into the Pydantic model
+                content = self._coerce_structured_payload(content, response_model)
                 return response_model.model_validate_json(content)
             return content
 
@@ -212,7 +265,7 @@ def translate_with_llm(
     text: str, system_message: str, user_prompt: str, llm_config: LLMConfig
 ) -> str:
     """
-    Translate text using the configured LLM provider with function calling via Instructor.
+    Translate text using the configured LLM provider with structured output validation.
     """
     if not text or not text.strip():
         return ""
@@ -238,7 +291,7 @@ def translate_plural_with_llm(
     plural_json: str, system_message: str, user_prompt: str, llm_config: LLMConfig
 ) -> Dict[str, str]:
     """
-    Translate plural resources using the configured LLM provider with function calling via Instructor.
+    Translate plural resources using the configured LLM provider with structured output validation.
     """
     client = LLMClient(llm_config)
     full_user_prompt = f"{user_prompt}\n\nPlural JSON to translate:\n{plural_json}"
@@ -263,10 +316,10 @@ def translate_plural_with_llm(
             f"LLM did not provide 'other' key for plural translation. "
             f"Provided keys: {list(result_dict.keys())}."
         )
-        if len(result_dict) == 1:
+        if result_dict:
             key = list(result_dict.keys())[0]
             result_dict["other"] = result_dict[key]
-        elif len(result_dict) == 0:
+        else:
             raise ValueError("LLM returned no plural translations")
 
     return result_dict
@@ -280,14 +333,12 @@ def translate_strings_batch_with_llm(
     reference_examples: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, str]:
     """
-    Translate multiple strings in a single API call using batch mode via Instructor.
+    Translate multiple strings in a single API call using structured output validation.
     """
     if not strings_dict:
         return {}
 
     client = LLMClient(llm_config)
-
-    import json
 
     strings_json = json.dumps(strings_dict, indent=2, ensure_ascii=False)
     full_user_prompt = user_prompt
@@ -341,14 +392,12 @@ def translate_plurals_batch_with_llm(
     reference_examples: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Dict[str, str]]:
     """
-    Translate multiple plural resources in a single API call using batch mode via Instructor.
+    Translate multiple plural resources in a single API call using structured output validation.
     """
     if not plurals_dict:
         return {}
 
     client = LLMClient(llm_config)
-
-    import json
 
     plurals_json = json.dumps(plurals_dict, indent=2, ensure_ascii=False)
     full_user_prompt = user_prompt
@@ -384,6 +433,13 @@ def translate_plurals_batch_with_llm(
 
         if plural_name and quantities_dict:
             translations[plural_name] = quantities_dict
+
+    missing_plurals = set(plurals_dict.keys()) - set(translations.keys())
+    if missing_plurals:
+        raise ValueError(
+            "LLM returned an incomplete plural translations array. Missing plurals: "
+            + ", ".join(sorted(missing_plurals))
+        )
 
     # Post-process missing other fallbacks
     for plural_name, quantities in translations.items():
